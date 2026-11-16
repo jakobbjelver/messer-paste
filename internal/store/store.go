@@ -64,7 +64,6 @@ CREATE TABLE IF NOT EXISTS idempotency (
 
 CREATE INDEX IF NOT EXISTS idx_pastes_updated ON pastes(updated_at DESC, slug DESC);
 CREATE INDEX IF NOT EXISTS idx_pastes_expires ON pastes(expires_at) WHERE expires_at IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public ON files(paste_id, public_id);
 `
 
 // Trigram, not unicode61: a filename search has to match inside a word ("shot" finds
@@ -132,7 +131,10 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
-	return nil
+	// After the column exists: an index in the base schema would fail on an older files table, which
+	// is exactly how the first v0.2 deploy crash-looped.
+	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public ON files(paste_id, public_id)`)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }

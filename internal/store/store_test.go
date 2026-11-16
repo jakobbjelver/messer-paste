@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"github.com/jakobbjelver/messer-paste/internal/paste"
@@ -112,5 +114,36 @@ func TestBurnTombstone(t *testing.T) {
 	}
 	if burned, _ := st.WasBurned(ctx, "DDDDDDDD"); burned {
 		t.Fatal("unrelated slug reported burned")
+	}
+}
+
+// An old DB has a files table without public_id. Opening it must migrate, not crash: the first v0.2
+// deploy created the public index before the column existed and crash-looped in production.
+func TestOpenMigratesFilesTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`
+		CREATE TABLE pastes (id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL DEFAULT '',
+		  language TEXT NOT NULL DEFAULT 'text', kind TEXT NOT NULL, text_bytes INTEGER NOT NULL DEFAULT 0,
+		  file_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0,
+		  views INTEGER NOT NULL DEFAULT 0, burn INTEGER NOT NULL DEFAULT 0, expires_at INTEGER,
+		  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+		CREATE TABLE files (id INTEGER PRIMARY KEY, paste_id INTEGER NOT NULL, name TEXT NOT NULL,
+		  mime TEXT NOT NULL, size INTEGER NOT NULL, rel TEXT NOT NULL, sort INTEGER NOT NULL);
+	`); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("open old db: %v", err)
+	}
+	defer st.Close()
+	if _, err := st.db.Exec(`INSERT INTO files (paste_id, public_id, name, mime, size, rel, sort) VALUES (1, 'ABCD2345', 'a', 'text/plain', 1, 'a', 0)`); err != nil {
+		t.Fatalf("public_id missing after migration: %v", err)
 	}
 }
