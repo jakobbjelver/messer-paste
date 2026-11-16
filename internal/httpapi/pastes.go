@@ -63,12 +63,15 @@ func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := paste.CreateInput{
-		Title:     fields["title"],
-		Text:      fields["text"],
-		Language:  fields["language"],
-		ExpiresIn: expiresIn(fields["expires_in"]),
-		Burn:      fields["burn"] == "1",
-		Files:     files,
+		Title:      fields["title"],
+		Text:       fields["text"],
+		Language:   fields["language"],
+		ExpiresIn:  expiresIn(fields["expires_in"]),
+		Visibility: fields["visibility"],
+		Password:   fields["password"],
+		MaxViews:   maxViews(fields["max_views"]),
+		Burn:       fields["burn"] == "1",
+		Files:      files,
 	}
 	p, err := s.svc.Create(r.Context(), in)
 	if err != nil {
@@ -93,12 +96,16 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := paste.UpdateInput{
-		Title:     fields["title"],
-		Text:      fields["text"],
-		Language:  fields["language"],
-		ExpiresIn: expiresIn(fields["expires_in"]),
-		Burn:      fields["burn"] == "1",
-		Files:     files,
+		Title:         fields["title"],
+		Text:          fields["text"],
+		Language:      fields["language"],
+		ExpiresIn:     expiresIn(fields["expires_in"]),
+		Visibility:    fields["visibility"],
+		Password:      fields["password"],
+		ClearPassword: fields["clear_password"] == "1",
+		MaxViews:      maxViews(fields["max_views"]),
+		Burn:          fields["burn"] == "1",
+		Files:         files,
 	}
 	for _, raw := range strings.Split(fields["keep"], ",") {
 		raw = strings.TrimSpace(raw)
@@ -132,7 +139,11 @@ func (s *Server) purgePastes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rawPaste(w http.ResponseWriter, r *http.Request) {
-	text, _, err := s.svc.Raw(r.Context(), slugOf(r))
+	s.serveRaw(w, r, slugOf(r))
+}
+
+func (s *Server) serveRaw(w http.ResponseWriter, r *http.Request, slug string) {
+	text, _, err := s.svc.Raw(r.Context(), slug)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -144,12 +155,16 @@ func (s *Server) rawPaste(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) filePaste(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, r, slugOf(r))
+}
+
+func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, slug string) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		writeError(w, http.StatusNotFound, "E_NOT_FOUND")
 		return
 	}
-	handle, file, err := s.svc.File(r.Context(), slugOf(r), id)
+	handle, file, err := s.svc.File(r.Context(), slug, id)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -295,6 +310,15 @@ func slugOf(r *http.Request) string {
 		return ""
 	}
 	return slug
+}
+
+// maxViews 0 means "no cap": the form always sends the field, so a missing value is not a signal.
+func maxViews(raw string) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
 }
 
 func expiresIn(raw string) int64 {

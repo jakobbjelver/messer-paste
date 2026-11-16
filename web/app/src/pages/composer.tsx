@@ -12,6 +12,7 @@ import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
+import { useShareBase } from "@/hooks/use-config";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
 import { previewTitle } from "@/lib/title";
 import { absolute, bytes } from "@/lib/format";
@@ -31,6 +32,7 @@ export function ComposerScreen({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const shareBase = useShareBase();
   const { draft, set, addFiles, removeFile, reset, load, counts } = useDraft();
   const [pending, setPending] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -90,6 +92,10 @@ export function ComposerScreen({
     form.append("language", draft.language);
     form.append("expires_in", String(draft.expiresIn));
     form.append("burn", draft.burn ? "1" : "0");
+    form.append("visibility", draft.visibility);
+    form.append("max_views", String(draft.maxViews));
+    if (draft.password) form.append("password", draft.password);
+    if (draft.clearPassword) form.append("clear_password", "1");
     for (const file of draft.files) {
       if (file.file) form.append("file", file.file, file.name);
       else if (file.id) form.append("keep", String(file.id));
@@ -98,7 +104,7 @@ export function ComposerScreen({
       const saved =
         mode === "edit" && slug ? await api.update(slug, form) : await api.create(form);
       await queryClient.invalidateQueries({ queryKey: ["pastes"] });
-      const link = `${window.location.origin}/${saved.slug}`;
+      const link = `${saved.visibility === "public" ? shareBase : window.location.origin}/${saved.slug}`;
       let copied = false;
       try {
         await navigator.clipboard.writeText(link);
@@ -121,7 +127,7 @@ export function ComposerScreen({
     } finally {
       setPending(false);
     }
-  }, [draft, mode, navigate, pending, queryClient, reset, slug, hasText]);
+  }, [draft, mode, navigate, pending, queryClient, reset, shareBase, slug, hasText]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -333,6 +339,7 @@ export function ComposerScreen({
           onClearFiles={() => {
             for (const file of draft.files) removeFile(file.key);
           }}
+          locked={initial?.locked}
         />
 
         {dragging ? (

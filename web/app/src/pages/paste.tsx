@@ -6,6 +6,7 @@ import {
   Copy,
   DownloadSimple,
   Fire,
+  Lock,
   PencilSimple,
   Trash,
 } from "@phosphor-icons/react";
@@ -18,6 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
 import { highlight } from "@/lib/highlight";
 import { absolute, bytes, kindLabel, remaining } from "@/lib/format";
+import { useIsPublicHost, useShareBase } from "@/hooks/use-config";
 
 function CodeView({ text, language }: { text: string; language: string }) {
   const numbers = useMemo(
@@ -43,6 +45,9 @@ export function PastePage() {
   const queryClient = useQueryClient();
   const [revealed, setRevealed] = useState<RevealPayload | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [password, setPassword] = useState("");
+  const isPublicHost = useIsPublicHost();
+  const shareBase = useShareBase();
 
   const query = useQuery({
     queryKey: ["paste", slug],
@@ -59,6 +64,19 @@ export function PastePage() {
       toast("Burned");
     },
     onError: () => toast("Could not reveal"),
+  });
+
+  const unlock = useMutation({
+    mutationFn: () => api.unlock(slug, password),
+    onSuccess: async () => {
+      setPassword("");
+      await queryClient.invalidateQueries({ queryKey: ["paste", slug] });
+      toast("Unlocked");
+    },
+    onError: (error) =>
+      toast(
+        error instanceof ApiError && error.status === 401 ? "Wrong password" : "Could not unlock",
+      ),
   });
 
   const remove = useMutation({
@@ -125,6 +143,52 @@ export function PastePage() {
               {reveal.isPending ? "Revealing…" : "Reveal"}
             </button>
           </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (query.data?.locked) {
+    return (
+      <PageContainer className="py-7">
+        <div className="mx-auto grid w-full max-w-[440px] gap-6">
+          <div className="grid justify-items-center gap-1.5 text-center">
+            <span className="m-label">{slug}</span>
+            <h1 className="m-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)]">
+              Password required
+            </h1>
+          </div>
+          <form
+            className="grid justify-items-center gap-4 border border-[var(--border)] bg-[var(--surface)] px-6 py-8 text-center"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (password) unlock.mutate();
+            }}
+          >
+            <span className="grid size-11 place-items-center border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-2)]">
+              <Lock size={20} aria-hidden="true" />
+            </span>
+            <label className="grid w-full max-w-[280px] gap-1.5 text-left">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                Password
+              </span>
+              <input
+                type="password"
+                value={password}
+                autoFocus
+                autoComplete="current-password"
+                onChange={(event) => setPassword(event.target.value)}
+                className="h-9 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={unlock.isPending || password === ""}
+              className="inline-flex h-9 min-w-[132px] cursor-pointer items-center justify-center bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {unlock.isPending ? "Unlocking…" : "Unlock"}
+            </button>
+          </form>
         </div>
       </PageContainer>
     );
@@ -197,7 +261,8 @@ export function PastePage() {
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/${paste!.slug}`);
+      const base = paste!.visibility === "public" ? shareBase : window.location.origin;
+      await navigator.clipboard.writeText(`${base}/${paste!.slug}`);
       toast("Link copied");
     } catch {
       toast("Clipboard blocked");
@@ -226,6 +291,7 @@ export function PastePage() {
         }
         actions={
           <>
+            {isPublicHost ? null : (
             <Link
               to="/$slug/edit"
               params={{ slug: paste.slug }}
@@ -234,6 +300,7 @@ export function PastePage() {
             >
               <PencilSimple size={16} aria-hidden="true" />
             </Link>
+            )}
             {isText ? (
               <button
                 type="button"
@@ -254,14 +321,16 @@ export function PastePage() {
                 <DownloadSimple size={16} aria-hidden="true" />
               </a>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              aria-label="Delete"
-              className="grid size-8 cursor-pointer place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--destructive)]"
-            >
-              <Trash size={16} aria-hidden="true" />
-            </button>
+            {isPublicHost ? null : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                aria-label="Delete"
+                className="grid size-8 cursor-pointer place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--destructive)]"
+              >
+                <Trash size={16} aria-hidden="true" />
+              </button>
+            )}
           </>
         }
       />

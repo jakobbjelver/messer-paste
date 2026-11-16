@@ -16,6 +16,7 @@ var (
 	ErrTextTooBig  = errors.New("text_too_large")
 	ErrUnavailable = errors.New("content_unavailable")
 	ErrInvalid     = errors.New("invalid")
+	ErrLocked      = errors.New("locked")
 )
 
 type Paste struct {
@@ -32,9 +33,14 @@ type Paste struct {
 	ExpiresAt *int64 `json:"expiresAt"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
-	Text      string `json:"text,omitempty"`
-	Files     []File `json:"files,omitempty"`
-	Match     *Match `json:"match,omitempty"`
+	// Visibility is "private" (the default, behind Access) or "public" (readable on the public host).
+	Visibility   string `json:"visibility"`
+	PasswordHash string `json:"-"`
+	MaxViews     *int64 `json:"maxViews,omitempty"`
+	Locked       bool   `json:"locked,omitempty"`
+	Text         string `json:"text,omitempty"`
+	Files        []File `json:"files,omitempty"`
+	Match        *Match `json:"match,omitempty"`
 }
 
 type File struct {
@@ -47,6 +53,11 @@ type File struct {
 	Rel      string `json:"-"`
 	Sort     int    `json:"-"`
 }
+
+const (
+	VisibilityPrivate = "private"
+	VisibilityPublic  = "public"
+)
 
 // Match is what a search hit matched on, and the fragment around it. Only list responses carry it.
 type Match struct {

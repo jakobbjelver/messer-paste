@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS pastes (
   burn       INTEGER NOT NULL DEFAULT 0,
   expires_at INTEGER,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  visibility    TEXT NOT NULL DEFAULT 'private',
+  password_hash TEXT,
+  max_views     INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS files (
@@ -54,6 +57,13 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE TABLE IF NOT EXISTS burned (
   slug TEXT PRIMARY KEY,
   at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public_views (
+  slug   TEXT NOT NULL,
+  bucket INTEGER NOT NULL,
+  ip     TEXT NOT NULL,
+  PRIMARY KEY (slug, bucket, ip)
 );
 
 CREATE TABLE IF NOT EXISTS idempotency (
@@ -104,6 +114,9 @@ func Open(path string) (*Store, error) {
 // migrate adds columns that older DBs lack. SQLite has no ADD COLUMN IF NOT EXISTS, so the column
 // list decides.
 func (s *Store) migrate() error {
+	if err := s.addPasteColumns(); err != nil {
+		return err
+	}
 	rows, err := s.db.Query(`PRAGMA table_info(files)`)
 	if err != nil {
 		return err
@@ -137,6 +150,45 @@ func (s *Store) migrate() error {
 	return err
 }
 
+// addPasteColumns is the v0.3 migration. It runs before any index that mentions these columns —
+// that ordering is the whole lesson of the v0.2 crash-loop.
+func (s *Store) addPasteColumns() error {
+	have := map[string]bool{}
+	rows, err := s.db.Query(`PRAGMA table_info(pastes)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notNull, pk int
+		var def any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &def, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for column, ddl := range map[string]string{
+		"visibility":    `ALTER TABLE pastes ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`,
+		"password_hash": `ALTER TABLE pastes ADD COLUMN password_hash TEXT`,
+		"max_views":     `ALTER TABLE pastes ADD COLUMN max_views INTEGER`,
+	} {
+		if have[column] {
+			continue
+		}
+		if _, err := s.db.Exec(ddl); err != nil {
+			return fmt.Errorf("add column %s: %w", column, err)
+		}
+	}
+	return nil
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
@@ -150,10 +202,12 @@ func (s *Store) Create(ctx context.Context, p *paste.Paste, files []paste.File) 
 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO pastes (slug, title, language, kind, text_bytes, file_bytes, file_count,
-		                    views, burn, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		                    views, burn, expires_at, created_at, updated_at,
+		                    visibility, password_hash, max_views)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
 		p.Slug, p.Title, p.Language, p.Kind, p.TextBytes, p.FileBytes, p.FileCount,
-		boolInt(p.Burn), p.ExpiresAt, p.CreatedAt, p.UpdatedAt)
+		boolInt(p.Burn), p.ExpiresAt, p.CreatedAt, p.UpdatedAt,
+		orPrivate(p.Visibility), nullString(p.PasswordHash), p.MaxViews)
 	if err != nil {
 		return err
 	}
@@ -174,14 +228,16 @@ func (s *Store) Create(ctx context.Context, p *paste.Paste, files []paste.File) 
 func (s *Store) Get(ctx context.Context, slug string) (*paste.Paste, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, slug, title, language, kind, text_bytes, file_bytes, file_count, views, burn,
-		       expires_at, created_at, updated_at
+		       expires_at, created_at, updated_at, visibility, password_hash, max_views
 		FROM pastes WHERE slug = ?`, slug)
 
 	var p paste.Paste
 	var burn int
-	var expires sql.NullInt64
+	var expires, maxViews sql.NullInt64
+	var password sql.NullString
 	if err := row.Scan(&p.ID, &p.Slug, &p.Title, &p.Language, &p.Kind, &p.TextBytes, &p.FileBytes,
-		&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt,
+		&p.Visibility, &password, &maxViews); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, paste.ErrNotFound
 		}
@@ -191,6 +247,11 @@ func (s *Store) Get(ctx context.Context, slug string) (*paste.Paste, error) {
 	if expires.Valid {
 		value := expires.Int64
 		p.ExpiresAt = &value
+	}
+	p.PasswordHash = password.String
+	if maxViews.Valid {
+		value := maxViews.Int64
+		p.MaxViews = &value
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
@@ -238,7 +299,7 @@ func (s *Store) List(ctx context.Context, opts paste.ListOptions) (paste.ListRes
 	args = append(args, limit+1)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, slug, title, language, kind, text_bytes, file_bytes, file_count, views, burn,
-		       expires_at, created_at, updated_at
+		       expires_at, created_at, updated_at, visibility, password_hash, max_views
 		FROM pastes `+where+`
 		ORDER BY updated_at DESC, slug DESC
 		LIMIT ?`, args...)
@@ -275,6 +336,7 @@ func (s *Store) search(ctx context.Context, query string, limit int) (paste.List
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT p.id, p.slug, p.title, p.language, p.kind, p.text_bytes, p.file_bytes, p.file_count,
 		       p.views, p.burn, p.expires_at, p.created_at, p.updated_at,
+		       p.visibility, p.password_hash, p.max_views,
 		       snippet(pastes_fts, 0, char(1), char(2), '…', 12),
 		       snippet(pastes_fts, 1, char(1), char(2), '…', 12),
 		       snippet(pastes_fts, 2, char(1), char(2), '…', 12),
@@ -292,11 +354,13 @@ func (s *Store) search(ctx context.Context, query string, limit int) (paste.List
 	for rows.Next() {
 		var p paste.Paste
 		var burn int
-		var expires sql.NullInt64
+		var expires, maxViews sql.NullInt64
+		var password sql.NullString
 		var titleSnip, fileSnip, bodySnip string
 		var rank float64
 		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Language, &p.Kind, &p.TextBytes, &p.FileBytes,
 			&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt,
+			&p.Visibility, &password, &maxViews,
 			&titleSnip, &fileSnip, &bodySnip, &rank); err != nil {
 			return paste.ListResult{}, err
 		}
@@ -304,6 +368,11 @@ func (s *Store) search(ctx context.Context, query string, limit int) (paste.List
 		if expires.Valid {
 			value := expires.Int64
 			p.ExpiresAt = &value
+		}
+		p.PasswordHash = password.String
+		if maxViews.Valid {
+			value := maxViews.Int64
+			p.MaxViews = &value
 		}
 		p.Match = pickMatch(titleSnip, fileSnip, bodySnip)
 		result.Items = append(result.Items, p)
@@ -326,6 +395,7 @@ func (s *Store) searchPlain(ctx context.Context, query string, limit int) (paste
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT p.id, p.slug, p.title, p.language, p.kind, p.text_bytes, p.file_bytes, p.file_count,
 		       p.views, p.burn, p.expires_at, p.created_at, p.updated_at,
+		       p.visibility, p.password_hash, p.max_views,
 		       COALESCE((SELECT name FROM files WHERE paste_id = p.id AND name LIKE ? LIMIT 1), '')
 		FROM pastes p
 		WHERE p.title LIKE ? OR EXISTS (SELECT 1 FROM files WHERE paste_id = p.id AND name LIKE ?)
@@ -340,16 +410,23 @@ func (s *Store) searchPlain(ctx context.Context, query string, limit int) (paste
 	for rows.Next() {
 		var p paste.Paste
 		var burn int
-		var expires sql.NullInt64
+		var expires, maxViews sql.NullInt64
+		var password sql.NullString
 		var fileName string
 		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Language, &p.Kind, &p.TextBytes, &p.FileBytes,
-			&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt, &fileName); err != nil {
+			&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt,
+			&p.Visibility, &password, &maxViews, &fileName); err != nil {
 			return paste.ListResult{}, err
 		}
 		p.Burn = burn == 1
 		if expires.Valid {
 			value := expires.Int64
 			p.ExpiresAt = &value
+		}
+		p.PasswordHash = password.String
+		if maxViews.Valid {
+			value := maxViews.Int64
+			p.MaxViews = &value
 		}
 		if fileName != "" {
 			p.Match = &paste.Match{Field: "files", Snippet: fileName}
@@ -401,12 +478,19 @@ func scanPastes(rows *sql.Rows) ([]paste.Paste, error) {
 	for rows.Next() {
 		var p paste.Paste
 		var burn int
-		var expires sql.NullInt64
+		var expires, maxViews sql.NullInt64
+		var password sql.NullString
 		if err := rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Language, &p.Kind, &p.TextBytes, &p.FileBytes,
-			&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			&p.FileCount, &p.Views, &burn, &expires, &p.CreatedAt, &p.UpdatedAt,
+			&p.Visibility, &password, &maxViews); err != nil {
 			return nil, err
 		}
 		p.Burn = burn == 1
+		p.PasswordHash = password.String
+		if maxViews.Valid {
+			value := maxViews.Int64
+			p.MaxViews = &value
+		}
 		if expires.Valid {
 			value := expires.Int64
 			p.ExpiresAt = &value
@@ -425,10 +509,12 @@ func (s *Store) Update(ctx context.Context, p *paste.Paste, files []paste.File) 
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE pastes SET title = ?, language = ?, kind = ?, text_bytes = ?, file_bytes = ?,
-		                  file_count = ?, burn = ?, expires_at = ?, updated_at = ?
+		                  file_count = ?, burn = ?, expires_at = ?, updated_at = ?,
+		                  visibility = ?, password_hash = ?, max_views = ?
 		WHERE slug = ?`,
 		p.Title, p.Language, p.Kind, p.TextBytes, p.FileBytes, p.FileCount,
-		boolInt(p.Burn), p.ExpiresAt, p.UpdatedAt, p.Slug)
+		boolInt(p.Burn), p.ExpiresAt, p.UpdatedAt,
+		orPrivate(p.Visibility), nullString(p.PasswordHash), p.MaxViews, p.Slug)
 	if err != nil {
 		return err
 	}
@@ -517,6 +603,34 @@ func (s *Store) slugs(ctx context.Context, where string) ([]string, error) {
 		out = append(out, slug)
 	}
 	return out, rows.Err()
+}
+
+// SawView answers "has this client already counted in this hour?" The cap is enforced against that,
+// so a reader refreshing a one-view paste is not locked out by their own first read.
+func (s *Store) SawView(ctx context.Context, slug string, bucket int64, ip string) (bool, error) {
+	var seen int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM public_views WHERE slug = ? AND bucket = ? AND ip = ?`,
+		slug, bucket, ip).Scan(&seen)
+	return seen > 0, err
+}
+
+// RecordView counts a public read once per IP per hour: a reader refreshing the page must not burn
+// a view cap, and a bot loop must not either. It reports whether this was a new view.
+func (s *Store) RecordView(ctx context.Context, slug string, bucket int64, ip string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO public_views (slug, bucket, ip) VALUES (?, ?, ?)`, slug, bucket, ip)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM public_views WHERE bucket < ?`, bucket-48); err != nil {
+		return false, err
+	}
+	return affected == 1, nil
 }
 
 func (s *Store) IncrementViews(ctx context.Context, slug string) error {
@@ -665,6 +779,20 @@ func decodeCursor(cursor string) (int64, string, error) {
 		return 0, "", err
 	}
 	return at, parts[1], nil
+}
+
+func orPrivate(visibility string) string {
+	if visibility == "" {
+		return paste.VisibilityPrivate
+	}
+	return visibility
+}
+
+func nullString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func boolInt(value bool) int {

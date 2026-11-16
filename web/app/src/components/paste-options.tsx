@@ -42,6 +42,7 @@ export function PasteOptions({
   ctaLabel,
   onSubmit,
   onClearFiles,
+  locked,
 }: {
   draft: DraftState;
   set: (patch: Partial<DraftState>) => void;
@@ -50,6 +51,8 @@ export function PasteOptions({
   ctaLabel: string;
   onSubmit: () => void;
   onClearFiles: () => void;
+  /** The stored paste has a password. Only the owner sees this, and never the password itself. */
+  locked?: boolean;
 }) {
   const fileBytes = draft.files.reduce((total, file) => total + file.size, 0);
   const expiresAt =
@@ -101,6 +104,77 @@ export function PasteOptions({
           </span>
         </Section>
 
+        <Section
+          label="Visibility"
+          tip="Private stays behind an authenticating proxy. Public is readable by anyone with the link, on the public host: it must expire, and it cannot burn."
+        >
+          <div className="grid grid-cols-2 border border-[var(--border-strong)]">
+            {(["private", "public"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={draft.visibility === value}
+                onClick={() =>
+                  set(
+                    value === "public"
+                      ? { visibility: value, expiresIn: draft.expiresIn || 86_400, burn: false }
+                      : { visibility: value },
+                  )
+                }
+                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] font-mono text-[11px] uppercase tracking-[0.1em] last:border-r-0 ${
+                  draft.visibility === value
+                    ? "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] text-[var(--foreground)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[var(--primary)] after:content-['']"
+                    : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                }`}
+              >
+                {value === "private" ? "Private" : "Public"}
+              </button>
+            ))}
+          </div>
+
+          {draft.visibility === "public" ? (
+            <>
+              <label className="grid gap-1">
+                <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                  Password
+                </span>
+                <input
+                  type="password"
+                  value={draft.password}
+                  autoComplete="new-password"
+                  placeholder={locked ? "Set a new one, or keep the current" : "Optional · 8 characters or more"}
+                  onChange={(event) => set({ password: event.target.value, clearPassword: false })}
+                  className="h-8 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                  Reader limit
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.maxViews === 0 ? "" : draft.maxViews}
+                  placeholder="No limit"
+                  onChange={(event) =>
+                    set({ maxViews: Math.max(0, Number(event.target.value) || 0) })
+                  }
+                  className="h-8 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]"
+                />
+              </label>
+              {locked ? (
+                <button
+                  type="button"
+                  onClick={() => set({ clearPassword: true, password: "" })}
+                  className="h-7 cursor-pointer justify-self-start px-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                >
+                  {draft.clearPassword ? "Password will be removed" : "Remove password"}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </Section>
+
         <Section label="Expires">
           <div className="grid grid-cols-4 border border-[var(--border-strong)]">
             {EXPIRY.map((option) => (
@@ -109,8 +183,9 @@ export function PasteOptions({
                 type="button"
                 aria-pressed={draft.expiresIn === option.value}
                 aria-label={option.label ?? "Never expires"}
+                disabled={draft.visibility === "public" && option.value === 0}
                 onClick={() => set({ expiresIn: option.value })}
-                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] font-mono text-[11px] uppercase tracking-[0.1em] last:border-r-0 ${
+                className={`relative grid h-8 cursor-pointer place-items-center disabled:cursor-not-allowed disabled:opacity-40 border-r border-[var(--border-strong)] font-mono text-[11px] uppercase tracking-[0.1em] last:border-r-0 ${
                   draft.expiresIn === option.value
                     ? "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] text-[var(--foreground)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[var(--primary)] after:content-['']"
                     : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"

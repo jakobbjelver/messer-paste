@@ -5,6 +5,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,15 @@ type Config struct {
 	MaxPaste   int64
 	MaxBurn    int64
 	ExpiryTick time.Duration
+
+	// PublicHost is the hostname that serves public pastes. Empty disables the feature: every
+	// request is then the private app, which is what the binary did before v0.3.
+	PublicHost string
+	// Secret signs the unlock cookie. main creates it on first boot if it is empty.
+	Secret string
+	// PublicRate and UnlockRate are per-IP requests per minute on the public host.
+	PublicRate int
+	UnlockRate int
 }
 
 func Load() Config {
@@ -29,6 +39,10 @@ func Load() Config {
 		MaxPaste:   envInt("MAX_PASTE_BYTES", 250<<20),
 		MaxBurn:    envInt("MAX_BURN_BYTES", 10<<20),
 		ExpiryTick: 30 * time.Second,
+		PublicHost: strings.TrimSpace(env("PUBLIC_HOST", "")),
+		Secret:     env("PASTE_SECRET", ""),
+		PublicRate: int(envInt("PUBLIC_RATE_PER_MIN", 120)),
+		UnlockRate: int(envInt("UNLOCK_RATE_PER_MIN", 10)),
 	}
 }
 

@@ -27,6 +27,21 @@ Everything below needs a bearer token from a 0600 file, or a an authenticating p
 
 Each item carries `match.field` and a `match.snippet`; U+0001 and U+0002 wrap the hit.
 
+## Share a paste with someone who has no Access
+
+  curl -sS -X POST https://paste.example.com/api/v1/pastes \
+    -H "Authorization: Bearer ***" \
+    -F title="share this" -F text=- -F visibility=public -F expires_in=86400 \
+    -F password=correct-horse-battery -F max_views=5
+
+The link is https://pub.example.com/<slug>. That host has no list, no search and no write:
+only GET one paste, its /raw text and its files, plus POST /unlock when a password is set.
+A public paste must expire, and it cannot burn. Password minimum is 8 characters.
+max_views counts distinct readers (one per IP per hour); 0 or absent means no cap.
+
+  curl -sS -X POST https://pub.example.com/api/v1/pastes/<slug>/unlock \
+    -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}'
+
 ## Delete
 
   curl -sS -X DELETE https://paste.example.com/api/v1/pastes/<slug> -H "Authorization: Bearer $PASTE_TOKEN"
@@ -34,6 +49,7 @@ Each item carries `match.field` and a `match.snippet`; U+0001 and U+0002 wrap th
 ## Contract
 
   GET /api/v1/openapi.json
+  GET /api/v1/config          {"public_host":"pub.example.com"}
 
 Timestamps are RFC 3339 UTC. Errors are {"error":{"code","message"}} with a stable code.
 Listing is paginated: ?limit=&cursor=, response has next_cursor and has_more.

@@ -32,19 +32,42 @@ type Server struct {
 	Version string
 	Commit  string
 	Built   string
+
+	publicLimitRL *limiter
+	unlockLimit   *limiter
 }
 
 func New(cfg config.Config, svc *paste.Service, st *store.Store, tree *paste.Storage, hub *Hub, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{cfg: cfg, svc: svc, store: st, tree: tree, hub: hub, log: log, Version: "dev", Commit: "dev", Built: "unknown"}
+	return &Server{
+		cfg: cfg, svc: svc, store: st, tree: tree, hub: hub, log: log,
+		Version: "dev", Commit: "dev", Built: "unknown",
+		publicLimitRL: newLimiter(cfg.PublicRate),
+		unlockLimit:   newLimiter(cfg.UnlockRate),
+	}
 }
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 	r.Use(s.requestLog)
+
+	// One binary, two products. The host decides which, before any route is matched, so the two
+	// route sets never share a lookup table.
+	if s.cfg.PublicHost != "" {
+		public := s.publicRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if s.isPublicHost(r) {
+					public.ServeHTTP(w, r)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		})
+	}
 
 	r.Get("/healthz", s.health)
 	r.Get("/readyz", s.ready)
@@ -58,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 		api.Post("/pastes", s.createPaste)
 		api.Delete("/pastes", s.purgePastes)
 		api.Get("/events", s.events)
+		api.Get("/config", s.config)
 		api.Get("/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.Header().Set("Cache-Control", "public, max-age=300")
@@ -167,6 +191,8 @@ func statusFor(err error) (int, string) {
 		return http.StatusNotFound, "E_NOT_FOUND"
 	case errors.Is(err, paste.ErrGone):
 		return http.StatusGone, "E_GONE"
+	case errors.Is(err, paste.ErrLocked):
+		return http.StatusUnauthorized, "E_LOCKED"
 	case errors.Is(err, paste.ErrBurnNeeded):
 		return http.StatusConflict, "E_BURN_REQUIRED"
 	case errors.Is(err, paste.ErrTooLarge):

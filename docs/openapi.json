@@ -7,7 +7,12 @@
   },
   "servers": [
     {
-      "url": "https://paste.example.com"
+      "url": "https://paste.example.com",
+      "description": "private app (an authenticating proxy)"
+    },
+    {
+      "url": "https://pub.example.com",
+      "description": "public reader: GET a paste, its raw text and its files, plus unlock"
     }
   ],
   "components": {
@@ -113,6 +118,24 @@
           },
           "match": {
             "$ref": "#/components/schemas/Match"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public"
+            ],
+            "description": "public pastes are readable on the public host without Access"
+          },
+          "max_views": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = no cap; counts distinct readers, one per hour"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "true when the paste needs a password; text and files are omitted"
           }
         }
       },
@@ -266,6 +289,20 @@
                   "file": {
                     "type": "string",
                     "format": "binary"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public"
+                    ]
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "min 8 chars; public only"
+                  },
+                  "max_views": {
+                    "type": "integer",
+                    "description": "0 or absent = no cap; public only"
                   }
                 }
               }
@@ -463,6 +500,93 @@
         "responses": {
           "200": {
             "description": "text/event-stream"
+          }
+        }
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "summary": "which host is which",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "public_host": {
+                      "type": "string",
+                      "description": "empty when the public host is disabled"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pastes/{slug}/unlock": {
+      "post": {
+        "summary": "unlock a password-protected public paste",
+        "description": "Sets an HttpOnly cookie valid for one hour. Rate limited per IP.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "unlocked; the cookie is set"
+          },
+          "401": {
+            "description": "wrong password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not a public paste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "too many attempts"
           }
         }
       }

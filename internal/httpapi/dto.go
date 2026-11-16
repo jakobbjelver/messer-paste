@@ -22,21 +22,24 @@ type matchDTO struct {
 }
 
 type pasteDTO struct {
-	Slug      string    `json:"slug"`
-	Title     string    `json:"title"`
-	Language  string    `json:"language"`
-	Kind      string    `json:"kind"`
-	TextBytes int64     `json:"text_bytes"`
-	FileBytes int64     `json:"file_bytes"`
-	FileCount int       `json:"file_count"`
-	Views     int64     `json:"views"`
-	Burn      bool      `json:"burn"`
-	ExpiresAt *string   `json:"expires_at"`
-	CreatedAt string    `json:"created_at"`
-	UpdatedAt string    `json:"updated_at"`
-	Text      string    `json:"text,omitempty"`
-	Files     []fileDTO `json:"files,omitempty"`
-	Match     *matchDTO `json:"match,omitempty"`
+	Slug       string    `json:"slug"`
+	Title      string    `json:"title"`
+	Language   string    `json:"language"`
+	Kind       string    `json:"kind"`
+	TextBytes  int64     `json:"text_bytes"`
+	FileBytes  int64     `json:"file_bytes"`
+	FileCount  int       `json:"file_count"`
+	Views      int64     `json:"views"`
+	Burn       bool      `json:"burn"`
+	Visibility string    `json:"visibility"`
+	MaxViews   *int64    `json:"max_views"`
+	Locked     bool      `json:"locked"`
+	ExpiresAt  *string   `json:"expires_at"`
+	CreatedAt  string    `json:"created_at"`
+	UpdatedAt  string    `json:"updated_at"`
+	Text       string    `json:"text,omitempty"`
+	Files      []fileDTO `json:"files,omitempty"`
+	Match      *matchDTO `json:"match,omitempty"`
 }
 
 type listDTO struct {
@@ -65,18 +68,21 @@ func stampDTO(unix int64) string {
 
 func dtoPaste(p *paste.Paste) pasteDTO {
 	out := pasteDTO{
-		Slug:      p.Slug,
-		Title:     p.Title,
-		Language:  p.Language,
-		Kind:      p.Kind,
-		TextBytes: p.TextBytes,
-		FileBytes: p.FileBytes,
-		FileCount: p.FileCount,
-		Views:     p.Views,
-		Burn:      p.Burn,
-		CreatedAt: stampDTO(p.CreatedAt),
-		UpdatedAt: stampDTO(p.UpdatedAt),
-		Text:      p.Text,
+		Slug:       p.Slug,
+		Title:      p.Title,
+		Language:   p.Language,
+		Kind:       p.Kind,
+		TextBytes:  p.TextBytes,
+		FileBytes:  p.FileBytes,
+		FileCount:  p.FileCount,
+		Views:      p.Views,
+		Burn:       p.Burn,
+		Visibility: orPrivateVisibility(p.Visibility),
+		MaxViews:   p.MaxViews,
+		Locked:     p.Locked,
+		CreatedAt:  stampDTO(p.CreatedAt),
+		UpdatedAt:  stampDTO(p.UpdatedAt),
+		Text:       p.Text,
 	}
 	if p.ExpiresAt != nil {
 		value := stampDTO(*p.ExpiresAt)
@@ -106,4 +112,11 @@ func dtoList(result paste.ListResult, took time.Duration) listDTO {
 		Total:      result.Total,
 		TookMS:     took.Milliseconds(),
 	}
+}
+
+func orPrivateVisibility(value string) string {
+	if value == "" {
+		return paste.VisibilityPrivate
+	}
+	return value
 }

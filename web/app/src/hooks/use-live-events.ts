@@ -20,10 +20,10 @@ export function useLive() {
  * One SSE stream for the whole app. The sink route never opens it: the conformance harness
  * navigates with `networkidle`, which a live EventSource never reaches.
  */
-export function useLiveEvents(): LiveState {
+export function useLiveEvents(allow = true): LiveState {
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const enabled = pathname !== "/ui";
+  const enabled = allow && pathname !== "/ui";
   const [connected, setConnected] = useState(false);
   const [last, setLast] = useState<LiveEvent | null>(null);
 

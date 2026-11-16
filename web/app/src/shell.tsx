@@ -7,6 +7,7 @@ import { GlobalSearch } from "@/components/global-search";
 import { Mark } from "@/components/mark";
 import { LiveContext, useLiveEvents } from "@/hooks/use-live-events";
 import { useTheme } from "@/hooks/use-theme";
+import { useConfig, useIsPublicHost } from "@/hooks/use-config";
 import { BUILD_SHA, CANON_VERSION } from "@/lib/version";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -34,8 +35,13 @@ const NAV: NavItem[] = [
 
 export function Shell() {
   const { dark, toggle } = useTheme();
-  const live = useLiveEvents();
+  const config = useConfig();
+  const isPublic = useIsPublicHost();
+  // No stream on the public host, and nothing is opened before the host question is answered.
+  const live = useLiveEvents(!config.isPending && !isPublic);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // The public host serves the same bundle but not the app: only a paste URL has anything to show.
+  const publicReady = isPublic && /^\/[2-9A-HJKMNP-Z]{8}$/i.test(pathname);
 
   return (
     <LiveContext.Provider value={live}>
@@ -43,12 +49,12 @@ export function Shell() {
         variant="topbar"
         container="default"
         brand={{ name: "Messer Paste", mark: <Mark />, href: "/" }}
-        nav={NAV}
+        nav={isPublic ? [] : NAV}
         active={pathname}
         linkComponent={linkComponent}
         actions={
           <>
-            {pathname === "/ui" ? null : <GlobalSearch />}
+            {pathname === "/ui" || isPublic ? null : <GlobalSearch />}
             <ThemeToggle dark={dark} onToggle={toggle} />
           </>
         }
@@ -58,7 +64,20 @@ export function Shell() {
           </span>
         }
       >
-        <Outlet />
+        {isPublic && !publicReady ? (
+          <div className="mx-auto w-full max-w-[var(--shell)] px-4 py-16 md:px-8">
+            <div className="border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
+              <p className="m-0 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                Public reader
+              </p>
+              <p className="mx-auto mt-2 mb-0 max-w-[38ch] text-sm leading-relaxed text-[var(--text-2)]">
+                This host only opens the paste link you were given. Nothing is listed here.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Outlet />
+        )}
         <Toaster dark={dark} />
       </AppShell>
     </LiveContext.Provider>

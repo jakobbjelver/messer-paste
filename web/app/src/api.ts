@@ -9,6 +9,8 @@ export type PasteFile = {
 
 export type Match = { field: "title" | "files" | "text"; snippet: string };
 
+export type Visibility = "private" | "public";
+
 export type PasteRow = {
   slug: string;
   title: string;
@@ -19,6 +21,9 @@ export type PasteRow = {
   fileCount: number;
   views: number;
   burn: boolean;
+  visibility: Visibility;
+  maxViews: number | null;
+  locked: boolean;
   expiresAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -54,6 +59,9 @@ type WirePaste = {
   file_count: number;
   views: number;
   burn: boolean;
+  visibility: "private" | "public";
+  max_views: number | null;
+  locked: boolean;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -89,6 +97,9 @@ function toPaste(wire: WirePaste): PasteRow {
     fileCount: wire.file_count,
     views: wire.views,
     burn: wire.burn,
+    visibility: wire.visibility ?? "private",
+    maxViews: wire.max_views ?? null,
+    locked: wire.locked ?? false,
     expiresAt: unix(wire.expires_at),
     createdAt: unix(wire.created_at) ?? 0,
     updatedAt: unix(wire.updated_at) ?? 0,
@@ -155,6 +166,13 @@ export const api = {
   purge: () => request<{ deleted: number }>("/api/v1/pastes", { method: "DELETE" }),
   reveal: (slug: string) =>
     request<RevealPayload>(`/api/v1/pastes/${slug}/reveal`, { method: "POST" }),
+  config: () => request<{ public_host: string }>("/api/v1/config"),
+  unlock: (slug: string, password: string) =>
+    request<void>(`/api/v1/pastes/${slug}/unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    }),
   rawUrl: (slug: string) => `/api/v1/pastes/${slug}/raw`,
   fileUrl: (slug: string, id: string, download = false) =>
     `/api/v1/pastes/${slug}/files/${id}${download ? "?download=1" : ""}`,

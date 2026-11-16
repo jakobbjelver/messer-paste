@@ -27,22 +27,31 @@ type Incoming struct {
 }
 
 type CreateInput struct {
-	Title     string
-	Text      string
-	Language  string
-	ExpiresIn int64
-	Burn      bool
-	Files     []Incoming
+	Title      string
+	Text       string
+	Language   string
+	ExpiresIn  int64
+	Burn       bool
+	Files      []Incoming
+	Visibility string
+	Password   string
+	MaxViews   int64
 }
 
 type UpdateInput struct {
-	Title     string
-	Text      string
-	Language  string
-	ExpiresIn int64
-	Burn      bool
-	Keep      []string
-	Files     []Incoming
+	Title      string
+	Text       string
+	Language   string
+	ExpiresIn  int64
+	Burn       bool
+	Keep       []string
+	Files      []Incoming
+	Visibility string
+	// Password replaces the stored hash when non-empty; ClearPassword removes it. Both are ignored
+	// when the paste is private: a password on something nobody else can reach is a lie in the UI.
+	Password      string
+	ClearPassword bool
+	MaxViews      int64
 }
 
 type RevealFile struct {
@@ -67,6 +76,8 @@ type Store interface {
 	Purge(ctx context.Context) ([]string, error)
 	Expired(ctx context.Context, now int64) ([]string, error)
 	IncrementViews(ctx context.Context, slug string) error
+	RecordView(ctx context.Context, slug string, bucket int64, ip string) (bool, error)
+	SawView(ctx context.Context, slug string, bucket int64, ip string) (bool, error)
 	Count(ctx context.Context) (int, error)
 	SearchCount(ctx context.Context) (int, error)
 	IndexAll(ctx context.Context, bodies map[string]string, names map[string][]string) error
@@ -90,6 +101,63 @@ func NewService(store Store, tree *Storage, limits Limits, events Publisher, log
 }
 
 func (s *Service) Tree() *Storage { return s.tree }
+
+// PublicSpec is what the public host knows about its reader: whether the unlock cookie checked out
+// and which client is asking (for the once-an-hour view count).
+type PublicSpec struct {
+	Unlocked bool
+	IP       string
+}
+
+// applyAccess validates the v0.3 fields and stamps them onto the record. Public means someone
+// without the Access policy can read it, so it must expire, it cannot burn (burn consumes the body
+// on a request we cannot attribute), and a password has to be long enough to be worth hashing.
+// maxViews 0 means "no cap", which is also how an existing cap is removed: the form always sends
+// the field, so absence is not a signal.
+func applyAccess(p *Paste, visibility, password string, clearPassword bool, maxViews, expiresIn int64) error {
+	switch visibility {
+	case "":
+		visibility = VisibilityPrivate
+	case VisibilityPrivate, VisibilityPublic:
+	default:
+		return fmt.Errorf("%w: unknown visibility", ErrInvalid)
+	}
+	p.Visibility = visibility
+	if visibility == VisibilityPrivate {
+		p.PasswordHash = ""
+		p.MaxViews = nil
+		return nil
+	}
+	if expiresIn <= 0 {
+		return fmt.Errorf("%w: a public paste must expire", ErrInvalid)
+	}
+	if p.Burn {
+		return fmt.Errorf("%w: a public paste cannot burn", ErrInvalid)
+	}
+	if maxViews < 0 {
+		return fmt.Errorf("%w: max views cannot be negative", ErrInvalid)
+	}
+	if maxViews > 0 {
+		value := maxViews
+		p.MaxViews = &value
+	} else {
+		p.MaxViews = nil
+	}
+	switch {
+	case clearPassword:
+		p.PasswordHash = ""
+	case password != "":
+		if len(password) < 8 {
+			return fmt.Errorf("%w: a password needs at least 8 characters", ErrInvalid)
+		}
+		hash, err := HashPassword(password)
+		if err != nil {
+			return err
+		}
+		p.PasswordHash = hash
+	}
+	return nil
+}
 
 func (s *Service) List(ctx context.Context, opts ListOptions) (ListResult, error) {
 	return s.store.List(ctx, opts)
@@ -205,6 +273,69 @@ func (s *Service) Get(ctx context.Context, slug string, countView bool) (*Paste,
 	return p, nil
 }
 
+// Resolve is the only read path the public host has. A slug that is not public is indistinguishable
+// from one that does not exist: both are ErrNotFound, and the caller turns both into 404.
+func (s *Service) Resolve(ctx context.Context, slug string, spec PublicSpec) (*Paste, error) {
+	p, err := s.store.Get(ctx, slug)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			if burned, _ := s.store.WasBurned(ctx, slug); burned {
+				return nil, ErrGone
+			}
+		}
+		return nil, err
+	}
+	if p.Visibility != VisibilityPublic {
+		return nil, ErrNotFound
+	}
+	if p.ExpiresAt != nil && *p.ExpiresAt <= stamp() {
+		return nil, ErrGone
+	}
+	bucket := stamp() / 3600
+	seen, err := s.store.SawView(ctx, slug, bucket, spec.IP)
+	if err != nil {
+		s.log.Warn("view lookup", "slug", slug, "err", err)
+	}
+	if p.MaxViews != nil && p.Views >= *p.MaxViews && !seen {
+		return nil, ErrGone
+	}
+	if p.PasswordHash != "" && !spec.Unlocked {
+		// Nothing but the fact that a record exists: no title, no size, no files.
+		return &Paste{Slug: p.Slug, Visibility: p.Visibility, Locked: true}, ErrLocked
+	}
+	text, err := s.tree.ReadBody(slug)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	p.Text = text
+	if fresh, err := s.store.RecordView(ctx, slug, bucket, spec.IP); err == nil && fresh {
+		if err := s.store.IncrementViews(ctx, slug); err != nil {
+			s.log.Warn("increment views", "slug", slug, "err", err)
+		}
+		p.Views++
+	}
+	return p, nil
+}
+
+// Unlock verifies the password for a public paste. Signing the cookie is the HTTP layer's job: the
+// secret is configuration, not domain.
+func (s *Service) Unlock(ctx context.Context, slug, password string) error {
+	p, err := s.store.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if p.Visibility != VisibilityPublic || p.ExpiresAt != nil && *p.ExpiresAt <= stamp() {
+		return ErrNotFound
+	}
+	if p.PasswordHash == "" {
+		return ErrInvalid
+	}
+	if !VerifyPassword(p.PasswordHash, password) {
+		return ErrLocked
+	}
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 	text := in.Text
 	if int64(len(text)) > s.limits.Text {
@@ -234,6 +365,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 		p.ExpiresAt = &expires
 	}
 	p.Text = text
+	if err := applyAccess(p, in.Visibility, in.Password, false, in.MaxViews, in.ExpiresIn); err != nil {
+		return nil, err
+	}
 
 	files, err := s.planFiles(in.Files, nil)
 	if err != nil {
@@ -350,6 +484,11 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	}
 	for _, file := range files {
 		p.FileBytes += file.Size
+	}
+	p.PasswordHash = current.PasswordHash
+	p.MaxViews = current.MaxViews
+	if err := applyAccess(p, in.Visibility, in.Password, in.ClearPassword, in.MaxViews, in.ExpiresIn); err != nil {
+		return nil, err
 	}
 
 	if err := s.tree.Prepare(slug); err != nil {

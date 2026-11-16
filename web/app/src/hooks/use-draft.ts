@@ -19,6 +19,11 @@ export type DraftState = {
   language: LanguageId;
   expiresIn: number;
   burn: boolean;
+  visibility: "private" | "public";
+  /** Empty means "keep the stored password" when editing, and "no password" when creating. */
+  password: string;
+  clearPassword: boolean;
+  maxViews: number;
   files: DraftFile[];
 };
 
@@ -28,6 +33,10 @@ const EMPTY: DraftState = {
   language: "auto",
   expiresIn: 86_400,
   burn: false,
+  visibility: "private",
+  password: "",
+  clearPassword: false,
+  maxViews: 0,
   files: [],
 };
 
@@ -73,6 +82,10 @@ function reducer(state: DraftState, action: Action): DraftState {
           ? Math.max(0, action.paste.expiresAt - Math.round(Date.now() / 1000))
           : 0,
         burn: action.paste.burn,
+        visibility: action.paste.visibility ?? "private",
+        password: "",
+        clearPassword: false,
+        maxViews: action.paste.maxViews ?? 0,
         files: (action.paste.files ?? []).map((file) => ({
           key: `srv-${file.id}`,
           id: file.id,
