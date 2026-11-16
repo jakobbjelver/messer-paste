@@ -391,13 +391,15 @@ export function PastePage() {
         <span>
           Created {absolute(paste.createdAt)} · Updated {absolute(paste.updatedAt)}
         </span>
-        <Link
-          to="/"
-          search={{ duplicate: paste.slug }}
-          className="flex items-center gap-1.5 text-[var(--text-2)] no-underline hover:text-[var(--foreground)]"
-        >
-          Duplicate <ArrowRight size={12} aria-hidden="true" />
-        </Link>
+        {isPublicHost ? null : (
+          <Link
+            to="/"
+            search={{ duplicate: paste.slug }}
+            className="flex items-center gap-1.5 text-[var(--text-2)] no-underline hover:text-[var(--foreground)]"
+          >
+            Duplicate <ArrowRight size={12} aria-hidden="true" />
+          </Link>
+        )}
       </div>
 
       <ConfirmDialog
