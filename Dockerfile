@@ -23,9 +23,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
       -X main.commit=${COMMIT} \
       -X main.built=${BUILD_DATE}" \
     -o /out/messer-paste ./cmd/messer-paste
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags "-s -w \
+      -X main.version=${VERSION} \
+      -X main.commit=${COMMIT} \
+      -X main.built=${BUILD_DATE}" \
+    -o /out/mpaste ./cmd/paste
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/messer-paste /usr/local/bin/messer-paste
+COPY --from=build /out/mpaste /usr/local/bin/mpaste
 USER nonroot:nonroot
 EXPOSE 8080
 # The container is never published: Caddy dials messer-paste:8080 on server_network. Metadata sits

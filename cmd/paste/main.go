@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -81,13 +82,13 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "paste:", err)
+		fmt.Fprintln(os.Stderr, "mpaste:", err)
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Print(`paste — Messer Paste client
+	fmt.Print(`mpaste — Messer Paste client
 
   paste put <file|-> [-t title] [-expires 1h|24h|7d|never] [-burn] [-json]
   paste get <slug|latest> [-json] [-o dir]
@@ -98,6 +99,7 @@ func usage() {
 Environment:
   PASTE_URL                default http://127.0.0.1:8080 (inside the container)
   PASTE_TOKEN              bearer token, optional
+  PASTE_INSECURE           set to 1 to skip TLS verification (only for https://paste.local)
   PASTE_AUTH_ID      an authenticating proxy service token, optional
   PASTE_AUTH_SECRET
 `)
@@ -118,7 +120,12 @@ func do(req *http.Request) (*http.Response, error) {
 		req.Header.Set("X-Auth-Client-Id", id)
 		req.Header.Set("X-Auth-Client-Secret", os.Getenv("PASTE_AUTH_SECRET"))
 	}
-	return (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if os.Getenv("PASTE_INSECURE") == "1" {
+		// Only for https://paste.local, whose certificate is issued by the estate CA.
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+	}
+	return (&http.Client{Timeout: 30 * time.Second, Transport: transport}).Do(req)
 }
 
 func url(path string) string { return baseURL() + "/api/v1" + path }

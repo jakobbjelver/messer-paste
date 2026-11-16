@@ -23,7 +23,7 @@ web-dev:
 
 build: web
 	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/$(BINARY) ./cmd/messer-paste
-	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/paste ./cmd/paste
+	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/mpaste ./cmd/paste
 
 dev:
 	./scripts/dev.sh
@@ -59,7 +59,7 @@ docker:
 
 # The machine client, on PATH. `paste put -` reads stdin; PASTE_URL selects a remote instance.
 install-client:
-	go build -trimpath -ldflags '$(LDFLAGS)' -o /opt/homebrew/bin/paste ./cmd/paste
+	go build -trimpath -ldflags '$(LDFLAGS)' -o /opt/homebrew/bin/mpaste ./cmd/paste
 
 clean:
 	rm -rf bin web/app/dist web/app/node_modules

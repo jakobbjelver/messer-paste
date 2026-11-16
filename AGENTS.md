@@ -40,7 +40,7 @@ make typecheck  # tsc -b --noEmit
 make build      # web + Go binary in bin/
 make check      # fmt-check + vet + race + typecheck
 make doctor     # db, content root, row/dir reconciliation, index, free space
-make install-client  # `paste` on PATH (the machine client)
+make install-client  # `mpaste` on PATH (the machine client)
 ```
 
 Every command is non-interactive and exits non-zero on failure.
@@ -63,7 +63,7 @@ Every command is non-interactive and exits non-zero on failure.
 - No auth in the app. an authenticating proxy is the gate; a 200 from an unauthenticated public request
   is a security bug. Machine clients use a bearer token from a `0600` file or a CF service token —
   never a checked-in `.env`.
-- An agent creates pastes through `paste put` or the API, never by writing into
+- An agent creates pastes through `mpaste put` or the API, never by writing into
   `/content`.
 - Uploads are streamed to a staging dir, committed by rename/copy, and every name passes `SafeName`.
 

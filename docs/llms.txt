@@ -41,8 +41,8 @@ POST /pastes accepts an Idempotency-Key header; a retry returns the original pas
 
 ## CLI (same API, no curl)
 
-  paste put file.log -t "build log" --expires 7d
-  paste get latest
-  paste ls -q arm64
+  mpaste put file.log -t "build log" --expires 7d
+  mpaste get latest
+  mpaste ls -q arm64
 
-On the host that runs the container, `docker exec -i messer-paste messer-paste put -` needs no token.
+On the host that runs the container, `docker exec -i messer-paste mpaste put -` needs no token.

@@ -40,13 +40,15 @@ fragment it matched on.
 
 ## Agent interface
 
+The client binary is `mpaste` (`/usr/bin/paste` is a macOS text utility, so the name cannot be reused).
+
 ```bash
-paste put - -t "build log" --expires 7d     # stdin → URL
-paste get latest                           # the last paste, text and file list
-paste ls -q arm64                          # search with match snippets
+mpaste put - -t "build log" --expires 7d     # stdin → URL
+mpaste get latest                           # the last paste, text and file list
+mpaste ls -q arm64                          # search with match snippets
 ```
 
-On the host that runs the container, `docker exec -i messer-paste messer-paste put -` needs no token;
+On the host that runs the container, `docker exec -i messer-paste mpaste put -` needs no token;
 from anywhere else set `PASTE_URL` and a bearer token (or a an authenticating proxy service token).
 
 Expiry is `expires_in` seconds (`0` = never). Burn pastes are capped at 10 MB because the reveal
