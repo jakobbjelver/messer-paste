@@ -32,7 +32,7 @@ deploy:
 
 dev:
   command: "make dev"
-  ports: ["3015", "8015"]
+  ports: [3015, 8015]
   pm2: "messer-paste-dev"
   action: "actions/actions.json"
 
