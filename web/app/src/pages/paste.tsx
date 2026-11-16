@@ -98,26 +98,33 @@ export function PastePage() {
   if (burnRequired && !revealed) {
     return (
       <PageContainer className="py-7">
-        <PageHead eyebrow={slug} title="Burn after reading" />
-        <div className="mx-auto grid max-w-[420px] justify-items-center gap-5 border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
-          <span className="grid size-11 place-items-center border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-2)]">
-            <Fire size={20} aria-hidden="true" />
-          </span>
-          <div className="grid gap-2">
-            <h2 className="m-0 font-mono text-base font-medium text-[var(--foreground)]">Read once</h2>
-            <p className="m-0 max-w-[34ch] text-sm leading-relaxed text-[var(--text-2)]">
-              Opening this paste consumes it. It is removed on every device, and there is no second
-              read.
-            </p>
+        <div className="mx-auto grid w-full max-w-[440px] gap-6">
+          <div className="grid justify-items-center gap-1.5 text-center">
+            <span className="m-label">{slug}</span>
+            <h1 className="m-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)]">
+              Burn after reading
+            </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => reveal.mutate()}
-            disabled={reveal.isPending}
-            className="inline-flex h-9 min-w-[132px] cursor-pointer items-center justify-center bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {reveal.isPending ? "Revealing…" : "Reveal"}
-          </button>
+          <div className="grid justify-items-center gap-5 border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
+            <span className="grid size-11 place-items-center border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-2)]">
+              <Fire size={20} aria-hidden="true" />
+            </span>
+            <div className="grid gap-2">
+              <h2 className="m-0 text-[15px] font-medium text-[var(--foreground)]">Read once</h2>
+              <p className="m-0 max-w-[34ch] text-sm leading-relaxed text-[var(--text-2)]">
+                Opening this paste consumes it. It is removed on every device, and there is no second
+                read.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => reveal.mutate()}
+              disabled={reveal.isPending}
+              className="inline-flex h-9 min-w-[132px] cursor-pointer items-center justify-center bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reveal.isPending ? "Revealing…" : "Reveal"}
+            </button>
+          </div>
         </div>
       </PageContainer>
     );
