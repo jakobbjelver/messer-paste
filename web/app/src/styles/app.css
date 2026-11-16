@@ -142,3 +142,9 @@
 [data-sonner-toast] [data-description] {
   color: var(--text-2) !important;
 }
+
+/* Keycaps inside a primary button: the recipe's 10.5px/5px is too wide next to a centred label. */
+.m-kbd--tight {
+  padding-inline: 4px;
+  font-size: 10px;
+}

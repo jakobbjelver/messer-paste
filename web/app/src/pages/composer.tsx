@@ -78,7 +78,7 @@ export function ComposerScreen({
   );
 
   const hasText = draft.text.trim().length > 0;
-  const commitLabel = mode === "edit" ? "Save changes" : "Create paste";
+  const commitLabel = mode === "edit" ? "Save" : "Create";
 
   const submit = useCallback(async () => {
     if (pending) return;
