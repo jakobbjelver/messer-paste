@@ -19,7 +19,7 @@ import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useLive } from "@/hooks/use-live-events";
-import { toast } from "@/components/toast";
+import { toast } from "sonner";
 import { ago, bytes, expiringSoon, remaining } from "@/lib/format";
 
 const COLUMNS = "grid-cols-[minmax(0,1fr)_96px_72px_84px] md:grid-cols-[minmax(0,1fr)_110px_76px_72px_96px]";

@@ -7,7 +7,7 @@ import { Mark } from "@/components/mark";
 import { LiveContext, useLiveEvents } from "@/hooks/use-live-events";
 import { useTheme } from "@/hooks/use-theme";
 import { BUILD_SHA, CANON_VERSION } from "@/lib/version";
-import { Toaster } from "@/components/toast";
+import { Toaster } from "@/components/ui/sonner";
 
 type LinkProps = {
   href: string;
@@ -31,27 +31,6 @@ const NAV: NavItem[] = [
   { href: "/recent", label: "Recent" },
 ];
 
-function LiveChip({ connected }: { connected: boolean }) {
-  return (
-    <span
-      role="status"
-      aria-live="polite"
-      className="hidden items-center gap-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] text-[var(--text-2)] sm:inline-flex"
-    >
-      <svg
-        aria-hidden="true"
-        width="6"
-        height="6"
-        viewBox="0 0 6 6"
-        className={connected ? "text-[var(--success)]" : "text-[var(--text-3)]"}
-      >
-        <circle cx="3" cy="3" r="3" fill="currentColor" />
-      </svg>
-      {connected ? "Live" : "Offline"}
-    </span>
-  );
-}
-
 export function Shell() {
   const { dark, toggle } = useTheme();
   const live = useLiveEvents();
@@ -68,7 +47,6 @@ export function Shell() {
         linkComponent={linkComponent}
         actions={
           <>
-            <LiveChip connected={live.connected} />
             <ThemeToggle dark={dark} onToggle={toggle} />
           </>
         }
@@ -79,7 +57,7 @@ export function Shell() {
         }
       >
         <Outlet />
-        <Toaster />
+        <Toaster dark={dark} />
       </AppShell>
     </LiveContext.Provider>
   );

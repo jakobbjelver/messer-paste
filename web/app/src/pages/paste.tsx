@@ -15,7 +15,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { toast } from "@/components/toast";
+import { toast } from "sonner";
 import { highlight } from "@/lib/highlight";
 import { absolute, bytes, kindLabel, remaining } from "@/lib/format";
 

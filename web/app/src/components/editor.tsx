@@ -13,12 +13,16 @@ export function Editor({
   onChange,
   language,
   wrap,
+  placeholder = "Paste or type…",
+  autoFocus = false,
 }: {
   id: string;
   value: string;
   onChange: (next: string) => void;
   language: LanguageId | string;
   wrap: boolean;
+  placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLPreElement>(null);
@@ -26,6 +30,10 @@ export function Editor({
 
   const lines = value === "" ? 1 : value.split("\n").length;
   const numbers = Array.from({ length: Math.min(lines, 20_000) }, (_, i) => i + 1).join("\n");
+
+  useEffect(() => {
+    if (autoFocus) sourceRef.current?.focus();
+  }, [autoFocus]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -61,7 +69,7 @@ export function Editor({
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          placeholder="Paste or type…"
+          placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== "Tab") return;

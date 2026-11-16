@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, UploadSimple } from "@phosphor-icons/react";
-import { Link } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import { api, ApiError, type PasteDetail } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
@@ -11,7 +12,6 @@ import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
-import { toast } from "@/components/toast";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
 import { absolute, bytes } from "@/lib/format";
 
@@ -31,7 +31,6 @@ export function ComposerScreen({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { draft, set, addFiles, removeFile, reset, load, counts } = useDraft();
-  const [started, setStarted] = useState(mode === "edit");
   const [pending, setPending] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [wrap, setWrap] = useState(() =>
@@ -41,10 +40,7 @@ export function ComposerScreen({
   const dragDepth = useRef(0);
 
   useEffect(() => {
-    if (initial) {
-      load(initial);
-      setStarted(true);
-    }
+    if (initial) load(initial);
   }, [initial, load]);
 
   useEffect(() => {
@@ -56,7 +52,6 @@ export function ComposerScreen({
       expiresIn: 86_400,
       burn: false,
     });
-    setStarted(true);
     let cancelled = false;
     void (async () => {
       const files = await Promise.all(
@@ -82,7 +77,6 @@ export function ComposerScreen({
   );
 
   const hasText = draft.text.trim().length > 0;
-  const empty = !started && !hasText && draft.files.length === 0;
   const commitLabel = mode === "edit" ? "Save changes" : "Create paste";
 
   const submit = useCallback(async () => {
@@ -133,25 +127,15 @@ export function ComposerScreen({
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         void submit();
-        return;
-      }
-      if (empty) {
-        const target = event.target as HTMLElement | null;
-        if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-        if (event.metaKey || event.ctrlKey || event.altKey) return;
-        if (event.key.length !== 1) return;
-        event.preventDefault();
-        set({ text: event.key });
-        setStarted(true);
-        requestAnimationFrame(() => document.getElementById("paste-source")?.focus());
       }
     };
+    // Files pasted anywhere in the composer attach; text belongs to the focused editor, so leave it
+    // alone instead of swallowing it.
     const onPaste = (event: ClipboardEvent) => {
       const files = Array.from(event.clipboardData?.files ?? []);
       if (files.length === 0) return;
       event.preventDefault();
       addFiles(files);
-      setStarted(true);
       toast(`${files.length} ${files.length === 1 ? "file" : "files"} attached`);
     };
     window.addEventListener("keydown", onKey);
@@ -160,7 +144,13 @@ export function ComposerScreen({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("paste", onPaste);
     };
-  }, [addFiles, empty, set, submit]);
+  }, [addFiles, submit]);
+
+  const onFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    addFiles(files);
+    toast(`${files.length} ${files.length === 1 ? "file" : "files"} attached`);
+  };
 
   return (
     <PageContainer className="py-7">
@@ -219,11 +209,7 @@ export function ComposerScreen({
               multiple
               className="sr-only"
               onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                if (files.length) {
-                  addFiles(files);
-                  setStarted(true);
-                }
+                onFiles(Array.from(event.target.files ?? []));
                 event.target.value = "";
               }}
             />
@@ -246,141 +232,98 @@ export function ComposerScreen({
           event.preventDefault();
           dragDepth.current = 0;
           setDragging(false);
-          const files = Array.from(event.dataTransfer?.files ?? []);
-          if (files.length === 0) return;
-          addFiles(files);
-          setStarted(true);
-          toast(`${files.length} ${files.length === 1 ? "file" : "files"} attached`);
+          onFiles(Array.from(event.dataTransfer?.files ?? []));
         }}
         data-dropzone="true"
-        className="grid min-h-[340px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-cols-[minmax(0,1fr)_264px]"
         data-dragging={dragging ? "true" : undefined}
+        className="relative grid min-h-[340px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-cols-[minmax(0,1fr)_264px]"
       >
-        <div className="flex min-h-0 min-w-0 flex-col border-b border-[var(--border)] lg:border-b-0 lg:border-r">
-          {empty ? (
+        <div
+          className="flex min-h-0 min-w-0 cursor-text flex-col border-b border-[var(--border)] lg:border-b-0 lg:border-r"
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button, a, input, textarea, figure")) return;
+            document.getElementById("paste-source")?.focus();
+          }}
+        >
+          <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
+            <span className="flex items-center gap-2 font-mono text-xs text-[var(--text-2)]">
+              <span>{languageLabel(detected)}</span>
+              {draft.language === "auto" ? (
+                <>
+                  <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
+                  <span className="text-[var(--text-3)]">Auto</span>
+                </>
+              ) : null}
+            </span>
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setWrap((was) => !was)}
+                aria-pressed={wrap}
+                className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface-2)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface-2)]"}`}
+              >
+                Wrap
+              </button>
+              {hasText ? (
+                <span className="px-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                  UTF-8
+                </span>
+              ) : null}
+            </span>
+          </div>
+
+          {draft.files.length > 0 ? (
             <div
-              role="button"
-              tabIndex={0}
-              aria-label="Drop files or paste, or start typing"
-              onClick={() => {
-                setStarted(true);
-                requestAnimationFrame(() => document.getElementById("paste-source")?.focus());
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                setStarted(true);
-                requestAnimationFrame(() => document.getElementById("paste-source")?.focus());
-              }}
-              className={`m-5 flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 border border-dashed px-6 py-9 text-center transition-colors duration-150 ${
-                dragging
-                  ? "border-[var(--border-strong)] bg-[var(--surface-2)]"
-                  : "border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
-              }`}
+              className={`shrink-0 overflow-y-auto border-b border-[var(--border)] p-3 ${hasText ? "max-h-[45%]" : "max-h-[60%]"}`}
             >
-              <UploadSimple size={30} className="text-[var(--text-3)]" aria-hidden="true" />
-              <h3 className="m-0 font-mono text-base font-normal text-[var(--foreground)]">
-                {dragging ? "Drop to add" : "Drop files or paste"}
-              </h3>
-              <p className="m-0 flex items-center gap-1.5 text-xs text-[var(--text-3)]">
-                <kbd className="m-kbd">⌘</kbd>
-                <kbd className="m-kbd">V</kbd>
-                <span className="ml-1">from clipboard, or start typing</span>
-              </p>
+              <Attachments files={draft.files} slug={slug} onRemove={removeFile} />
             </div>
-          ) : (
-            <>
-              <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
-                <span className="flex items-center gap-2 font-mono text-xs text-[var(--text-2)]">
-                  <span>{languageLabel(detected)}</span>
-                  {draft.language === "auto" ? (
-                    <>
-                      <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
-                      <span className="text-[var(--text-3)]">Auto</span>
-                    </>
-                  ) : null}
-                </span>
-                <span className="flex items-center gap-1">
-                  {hasText || draft.files.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setWrap((was) => !was)}
-                      aria-pressed={wrap}
-                      className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface-2)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface-2)]"}`}
-                    >
-                      Wrap
-                    </button>
-                  ) : null}
-                  {hasText ? (
-                    <span className="px-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
-                      UTF-8
-                    </span>
-                  ) : null}
-                </span>
-              </div>
+          ) : null}
 
-              <div className="flex min-h-0 flex-1 flex-col">
-                {draft.files.length > 0 && hasText ? (
-                  <div className="max-h-[45%] overflow-y-auto border-b border-[var(--border)] p-3">
-                    <Attachments files={draft.files} slug={slug} onRemove={removeFile} />
-                  </div>
-                ) : null}
-                {hasText || draft.files.length === 0 ? (
-                  <Editor
-                    id="paste-source"
-                    value={draft.text}
-                    onChange={(text) => set({ text })}
-                    language={detected}
-                    wrap={wrap}
-                  />
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                      <Attachments files={draft.files} slug={slug} onRemove={removeFile} />
-                    </div>
-                    <label className="flex h-11 items-center gap-2 border-t border-[var(--border)] px-3">
-                      <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
-                        Note
-                      </span>
-                      <input
-                        value={draft.text}
-                        onChange={(event) => set({ text: event.target.value })}
-                        placeholder="Add a note…"
-                        className="h-8 flex-1 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)]"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
+          <Editor
+            id="paste-source"
+            value={draft.text}
+            onChange={(text) => set({ text })}
+            language={detected}
+            wrap={wrap}
+            placeholder="Paste or type… drop files anywhere"
+            autoFocus
+          />
 
-              <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-3 font-mono text-[11px] text-[var(--text-3)]">
-                <span aria-label={`${counts.lines} lines, ${bytes(counts.textBytes)}`}>
-                  {counts.lines} {counts.lines === 1 ? "line" : "lines"} · {bytes(counts.textBytes)}
-                </span>
-                {draft.files.length > 0 && hasText ? (
-                  <span>
-                    {draft.files.length} {draft.files.length === 1 ? "file" : "files"} ·{" "}
-                    {bytes(counts.fileBytes)}
-                  </span>
-                ) : null}
-              </div>
-            </>
-          )}
+          <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-3 font-mono text-[11px] text-[var(--text-3)]">
+            <span aria-label={`${counts.lines} lines, ${bytes(counts.textBytes)}`}>
+              {counts.lines} {counts.lines === 1 ? "line" : "lines"} · {bytes(counts.textBytes)}
+            </span>
+            {draft.files.length > 0 ? (
+              <span>
+                {draft.files.length} {draft.files.length === 1 ? "file" : "files"} ·{" "}
+                {bytes(counts.fileBytes)}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <PasteOptions
           draft={draft}
           set={set}
           detected={detected}
-          mediaOnly={!hasText && draft.files.length > 0}
           pending={pending}
           ctaLabel={commitLabel}
-          hint={mode === "edit" ? "⌘⏎ to save" : "⌘⏎ to create"}
           onSubmit={() => void submit()}
           onClearFiles={() => {
             for (const file of draft.files) removeFile(file.key);
           }}
         />
+
+        {dragging ? (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center border border-dashed border-[var(--border-strong)] bg-[color-mix(in_oklab,var(--surface)_82%,transparent)]">
+            <span className="flex items-center gap-2 font-mono text-sm text-[var(--foreground)]">
+              <UploadSimple size={18} aria-hidden="true" />
+              Drop to attach
+            </span>
+          </div>
+        ) : null}
       </div>
     </PageContainer>
   );
