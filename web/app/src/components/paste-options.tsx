@@ -187,7 +187,7 @@ export function PasteOptions({
                 <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
                   Password
                 </span>
-                <span className="flex h-8 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
+                <span className="flex h-8 w-full min-w-0 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
                   <button
                     type="button"
                     onClick={generate}
@@ -326,7 +326,7 @@ export function PasteOptions({
           id="commit"
           disabled={pending || (!draft.text.trim() && draft.files.length === 0)}
           onClick={onSubmit}
-          className="flex h-9 w-full cursor-pointer items-center gap-2 bg-[var(--primary)] px-2.5 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:border disabled:border-[var(--border-strong)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)]"
+          className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 bg-[var(--primary)] px-2.5 sm:justify-start text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:border disabled:border-[var(--border-strong)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)]"
         >
           {!pending && ctaIcon ? (
             <span aria-hidden="true" className="shrink-0">

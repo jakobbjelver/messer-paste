@@ -157,3 +157,19 @@
   background: transparent;
   color: currentColor;
 }
+
+/* iOS Safari zooms the page in when a focused field is smaller than 16px. The editor is three layers
+   (gutter, mirror, textarea) that must share a font size and line height, so they move together. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .ed-gutter,
+  .ed-hl,
+  .ed-src {
+    font-size: 16px;
+    line-height: 25px;
+  }
+}
