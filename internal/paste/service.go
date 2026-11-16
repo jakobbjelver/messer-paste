@@ -2,12 +2,14 @@ package paste
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 )
 
 type Limits struct {
@@ -39,7 +41,7 @@ type UpdateInput struct {
 	Language  string
 	ExpiresIn int64
 	Burn      bool
-	Keep      []int64
+	Keep      []string
 	Files     []Incoming
 }
 
@@ -59,13 +61,15 @@ type Reveal struct {
 type Store interface {
 	Create(ctx context.Context, p *Paste, files []File) error
 	Get(ctx context.Context, slug string) (*Paste, error)
-	List(ctx context.Context) ([]Paste, error)
+	List(ctx context.Context, opts ListOptions) (ListResult, error)
 	Update(ctx context.Context, p *Paste, files []File) error
 	Delete(ctx context.Context, slug string) error
 	Purge(ctx context.Context) ([]string, error)
 	Expired(ctx context.Context, now int64) ([]string, error)
 	IncrementViews(ctx context.Context, slug string) error
 	Count(ctx context.Context) (int, error)
+	SearchCount(ctx context.Context) (int, error)
+	IndexAll(ctx context.Context, bodies map[string]string, names map[string][]string) error
 	MarkBurned(ctx context.Context, slug string, at int64) error
 	WasBurned(ctx context.Context, slug string) (bool, error)
 }
@@ -87,8 +91,52 @@ func NewService(store Store, tree *Storage, limits Limits, events Publisher, log
 
 func (s *Service) Tree() *Storage { return s.tree }
 
-func (s *Service) List(ctx context.Context) ([]Paste, error) {
-	return s.store.List(ctx)
+func (s *Service) List(ctx context.Context, opts ListOptions) (ListResult, error) {
+	return s.store.List(ctx, opts)
+}
+
+// BackfillSearch rebuilds the index when it is empty but rows exist (a DB restored without the FTS
+// table, or a fresh trigram index after an upgrade). Safe to call on every boot.
+func (s *Service) BackfillSearch(ctx context.Context) (int, error) {
+	total, err := s.store.Count(ctx)
+	if err != nil || total == 0 {
+		return 0, err
+	}
+	if n, err := s.store.SearchCount(ctx); err != nil {
+		return 0, err
+	} else if n > 0 {
+		return 0, nil
+	}
+	page, err := s.store.List(ctx, ListOptions{Limit: 200})
+	if err != nil {
+		return 0, err
+	}
+	bodies := make(map[string]string, len(page.Items))
+	names := make(map[string][]string, len(page.Items))
+	for {
+		for _, item := range page.Items {
+			detail, err := s.store.Get(ctx, item.Slug)
+			if err != nil {
+				continue
+			}
+			body, _ := s.tree.ReadBody(item.Slug)
+			bodies[item.Slug] = body
+			for _, file := range detail.Files {
+				names[item.Slug] = append(names[item.Slug], file.Name)
+			}
+		}
+		if !page.HasMore || page.Next == "" {
+			break
+		}
+		page, err = s.store.List(ctx, ListOptions{Limit: 200, Cursor: page.Next})
+		if err != nil {
+			return 0, err
+		}
+	}
+	if err := s.store.IndexAll(ctx, bodies, names); err != nil {
+		return 0, err
+	}
+	return len(bodies), nil
 }
 
 // Raw is the download path: never counted as a view, never allowed to consume a burn paste.
@@ -108,7 +156,7 @@ func (s *Service) Raw(ctx context.Context, slug string) (string, string, error) 
 }
 
 // File opens one attachment for streaming. The caller closes it.
-func (s *Service) File(ctx context.Context, slug string, id int64) (*os.File, File, error) {
+func (s *Service) File(ctx context.Context, slug string, publicID string) (*os.File, File, error) {
 	p, err := s.store.Get(ctx, slug)
 	if err != nil {
 		return nil, File{}, err
@@ -117,7 +165,7 @@ func (s *Service) File(ctx context.Context, slug string, id int64) (*os.File, Fi
 		return nil, File{}, ErrBurnNeeded
 	}
 	for _, file := range p.Files {
-		if file.ID != id {
+		if file.PublicID != publicID {
 			continue
 		}
 		handle, err := s.tree.Open(slug, file.Rel)
@@ -175,7 +223,6 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 
 	now := stamp()
 	p := &Paste{
-		Title:     truncate(in.Title, 200),
 		Language:  normalizeLanguage(in.Language, text, in.Files),
 		TextBytes: int64(len(text)),
 		Burn:      in.Burn,
@@ -186,11 +233,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 		expires := now + in.ExpiresIn
 		p.ExpiresAt = &expires
 	}
+	p.Text = text
 
 	files, err := s.planFiles(in.Files, nil)
 	if err != nil {
 		return nil, err
 	}
+	for index := range files {
+		files[index].PublicID = NewPublicID()
+	}
+	p.Title = titleOr(in.Title, text, files)
 	p.Kind = KindOf(text, files)
 	p.FileCount = len(files)
 	for _, file := range files {
@@ -244,9 +296,9 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 		return nil, ErrTextTooBig
 	}
 
-	keep := make(map[int64]File, len(current.Files))
+	keep := make(map[string]File, len(current.Files))
 	for _, file := range current.Files {
-		keep[file.ID] = file
+		keep[file.PublicID] = file
 	}
 	kept := make([]File, 0, len(in.Keep))
 	for _, id := range in.Keep {
@@ -282,7 +334,8 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	p := &Paste{
 		ID:        current.ID,
 		Slug:      slug,
-		Title:     truncate(in.Title, 200),
+		Text:      text,
+		Title:     titleOr(in.Title, text, files),
 		Language:  normalizeLanguage(in.Language, text, in.Files),
 		Kind:      KindOf(text, files),
 		TextBytes: int64(len(text)),
@@ -434,10 +487,11 @@ type ReconcileResult struct {
 
 func (s *Service) Reconcile(ctx context.Context) (ReconcileResult, error) {
 	var result ReconcileResult
-	rows, err := s.store.List(ctx)
+	page, err := s.store.List(ctx, ListOptions{Limit: 200})
 	if err != nil {
 		return result, err
 	}
+	rows := page.Items
 	known := make(map[string]bool, len(rows))
 	for _, row := range rows {
 		known[row.Slug] = true
@@ -542,4 +596,27 @@ func joinRel(dir, rel string) string {
 
 func isUnique(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE")
+}
+
+// titleOr keeps a user title, otherwise derives one. The 200-char cap protects the UI, not the DB.
+func titleOr(raw, text string, files []File) string {
+	if trimmed := strings.TrimSpace(raw); trimmed != "" {
+		return truncate(trimmed, 200)
+	}
+	return truncate(DeriveTitle(text, files), 200)
+}
+
+// NewPublicID is the URL identity of a file. Same alphabet as a slug: no 0/O/1/I.
+func NewPublicID() string {
+	const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		for i := range buf {
+			buf[i] = byte(time.Now().UnixNano() % 31)
+		}
+	}
+	for i, b := range buf {
+		buf[i] = alphabet[int(b)%len(alphabet)]
+	}
+	return string(buf)
 }

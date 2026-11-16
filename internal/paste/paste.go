@@ -15,6 +15,7 @@ var (
 	ErrTooLarge    = errors.New("too_large")
 	ErrTextTooBig  = errors.New("text_too_large")
 	ErrUnavailable = errors.New("content_unavailable")
+	ErrInvalid     = errors.New("invalid")
 )
 
 type Paste struct {
@@ -33,15 +34,24 @@ type Paste struct {
 	UpdatedAt int64  `json:"updatedAt"`
 	Text      string `json:"text,omitempty"`
 	Files     []File `json:"files,omitempty"`
+	Match     *Match `json:"match,omitempty"`
 }
 
 type File struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Mime string `json:"mime"`
-	Size int64  `json:"size"`
-	Rel  string `json:"-"`
-	Sort int    `json:"-"`
+	ID int64 `json:"-"`
+	// PublicID is what URLs carry: an auto-increment id must never be the public identifier.
+	PublicID string `json:"id"`
+	Name     string `json:"name"`
+	Mime     string `json:"mime"`
+	Size     int64  `json:"size"`
+	Rel      string `json:"-"`
+	Sort     int    `json:"-"`
+}
+
+// Match is what a search hit matched on, and the fragment around it. Only list responses carry it.
+type Match struct {
+	Field   string `json:"field"`
+	Snippet string `json:"snippet"`
 }
 
 // KindOf is the one place the list's Kind column is decided.
@@ -65,6 +75,20 @@ func KindOf(text string, files []File) string {
 	default:
 		return "files"
 	}
+}
+
+// ListOptions and ListResult are the archive contract: keyset pagination plus one search path.
+type ListOptions struct {
+	Query  string
+	Limit  int
+	Cursor string
+}
+
+type ListResult struct {
+	Items   []Paste
+	Next    string
+	HasMore bool
+	Total   int
 }
 
 type Event struct {

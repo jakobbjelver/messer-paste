@@ -29,7 +29,7 @@ export function useLiveEvents(): LiveState {
 
   useEffect(() => {
     if (!enabled) return;
-    const source = new EventSource("/api/events");
+    const source = new EventSource("/api/v1/events");
 
     source.addEventListener("ready", () => setConnected(true));
     source.onopen = () => setConnected(true);

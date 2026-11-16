@@ -9,7 +9,7 @@ LDFLAGS := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.built=$(DATE)
 
-.PHONY: all web web-dev web-test build dev test race fmt fmt-check vet lint typecheck check doctor docker clean
+.PHONY: all web web-dev web-test build dev test race fmt fmt-check vet lint typecheck check doctor docker install-client clean
 
 all: build
 
@@ -23,6 +23,7 @@ web-dev:
 
 build: web
 	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/$(BINARY) ./cmd/messer-paste
+	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/paste ./cmd/paste
 
 dev:
 	./scripts/dev.sh
@@ -55,6 +56,10 @@ doctor:
 
 docker:
 	docker build -t $(IMAGE) .
+
+# The machine client, on PATH. `paste put -` reads stdin; PASTE_URL selects a remote instance.
+install-client:
+	go build -trimpath -ldflags '$(LDFLAGS)' -o /opt/homebrew/bin/paste ./cmd/paste
 
 clean:
 	rm -rf bin web/app/dist web/app/node_modules

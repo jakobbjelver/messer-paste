@@ -49,7 +49,8 @@ func TestCRUD(t *testing.T) {
 		t.Fatalf("views = %d", got.Views)
 	}
 
-	rows, err := st.List(ctx)
+	page, err := st.List(ctx, paste.ListOptions{Limit: 50})
+	rows := page.Items
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("list = %v, %v", rows, err)
 	}

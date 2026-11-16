@@ -39,7 +39,7 @@ func runDoctor(cfg config.Config, st *store.Store, tree *paste.Storage, log *slo
 		report(true, "content", tree.Root())
 	}
 
-	rows, err := st.List(ctx)
+	rows, err := st.AllSlugs(ctx)
 	if err != nil {
 		report(false, "reconcile", err.Error())
 	} else {
@@ -49,9 +49,9 @@ func runDoctor(cfg config.Config, st *store.Store, tree *paste.Storage, log *slo
 		} else {
 			missing, orphan := 0, 0
 			known := map[string]bool{}
-			for _, row := range rows {
-				known[row.Slug] = true
-				if _, err := os.Stat(tree.Dir(row.Slug)); err != nil {
+			for _, slug := range rows {
+				known[slug] = true
+				if _, err := os.Stat(tree.Dir(slug)); err != nil {
 					missing++
 				}
 			}
@@ -63,6 +63,11 @@ func runDoctor(cfg config.Config, st *store.Store, tree *paste.Storage, log *slo
 			report(missing == 0 && orphan == 0, "reconcile",
 				fmt.Sprintf("%d rows, %d dirs, %d missing, %d orphan", len(rows), len(dirs), missing, orphan))
 		}
+	}
+	if indexed, err := st.SearchCount(ctx); err != nil {
+		report(false, "search", err.Error())
+	} else {
+		report(indexed == len(rows), "search", fmt.Sprintf("%d indexed rows, %d pastes", indexed, len(rows)))
 	}
 
 	var stat syscall.Statfs_t

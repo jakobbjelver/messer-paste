@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/jakobbjelver/messer-paste/docs"
 	"github.com/jakobbjelver/messer-paste/internal/config"
 	"github.com/jakobbjelver/messer-paste/internal/paste"
 	"github.com/jakobbjelver/messer-paste/internal/store"
@@ -47,12 +48,21 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/healthz", s.health)
 	r.Get("/readyz", s.ready)
+	r.Get("/llms.txt", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write(docs.LLMS)
+	})
 
-	r.Route("/api", func(api chi.Router) {
+	r.Route("/api/v1", func(api chi.Router) {
 		api.Get("/pastes", s.listPastes)
 		api.Post("/pastes", s.createPaste)
 		api.Delete("/pastes", s.purgePastes)
 		api.Get("/events", s.events)
+		api.Get("/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_, _ = w.Write(docs.OpenAPI)
+		})
 
 		api.Route("/pastes/{slug}", func(item chi.Router) {
 			item.Get("/", s.getPaste)
@@ -67,7 +77,7 @@ func (s *Server) Handler() http.Handler {
 	webHandler := web.Handler()
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			writeError(w, http.StatusNotFound, "not_found")
+			writeError(w, http.StatusNotFound, "E_NOT_FOUND")
 			return
 		}
 		webHandler.ServeHTTP(w, r)
@@ -104,18 +114,25 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Ping(r.Context()); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "db_unavailable")
+		writeError(w, http.StatusServiceUnavailable, "E_CONTENT_UNAVAILABLE")
 		return
 	}
 	probe, err := os.CreateTemp(s.tree.Root(), ".ready-*")
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "content_unavailable")
+		writeError(w, http.StatusServiceUnavailable, "E_CONTENT_UNAVAILABLE")
 		return
 	}
 	name := probe.Name()
 	probe.Close()
 	_ = os.Remove(name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+}
+
+func writeJSONBytes(w http.ResponseWriter, status int, body []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -125,28 +142,43 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+var messages = map[string]string{
+	"E_NOT_FOUND":           "That paste does not exist.",
+	"E_GONE":                "That paste is gone.",
+	"E_BURN_REQUIRED":       "This paste is revealed by reading it, not by opening it.",
+	"E_TOO_LARGE":           "That is larger than this paste can hold.",
+	"E_TEXT_TOO_LARGE":      "The text is larger than the paste limit.",
+	"E_CONTENT_UNAVAILABLE": "The content volume is not available.",
+	"E_INVALID":             "That request is not valid.",
+	"E_INTERNAL":            "Something went wrong.",
+}
+
 func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
+	message, ok := messages[code]
+	if !ok {
+		message = messages["E_INTERNAL"]
+	}
+	writeJSON(w, status, errorDTO{Error: errorBody{Code: code, Message: message}})
 }
 
 func statusFor(err error) (int, string) {
 	switch {
 	case errors.Is(err, paste.ErrNotFound):
-		return http.StatusNotFound, "not_found"
+		return http.StatusNotFound, "E_NOT_FOUND"
 	case errors.Is(err, paste.ErrGone):
-		return http.StatusGone, "gone"
+		return http.StatusGone, "E_GONE"
 	case errors.Is(err, paste.ErrBurnNeeded):
-		return http.StatusConflict, "burn_required"
+		return http.StatusConflict, "E_BURN_REQUIRED"
 	case errors.Is(err, paste.ErrTooLarge):
-		return http.StatusRequestEntityTooLarge, "too_large"
+		return http.StatusRequestEntityTooLarge, "E_TOO_LARGE"
 	case errors.Is(err, paste.ErrTextTooBig):
-		return http.StatusRequestEntityTooLarge, "text_too_large"
+		return http.StatusRequestEntityTooLarge, "E_TEXT_TOO_LARGE"
 	case errors.Is(err, paste.ErrUnavailable):
-		return http.StatusServiceUnavailable, "content_unavailable"
-	case errors.Is(err, errBadRequest):
-		return http.StatusBadRequest, "bad_request"
+		return http.StatusServiceUnavailable, "E_CONTENT_UNAVAILABLE"
+	case errors.Is(err, paste.ErrInvalid), errors.Is(err, errBadRequest):
+		return http.StatusBadRequest, "E_INVALID"
 	default:
-		return http.StatusInternalServerError, "internal"
+		return http.StatusInternalServerError, "E_INTERNAL"
 	}
 }
 

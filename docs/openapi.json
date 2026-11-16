@@ -1,0 +1,471 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Messer Paste",
+    "version": "0.2.0",
+    "description": "Single-user pastebin. Text, images and files with expiry, burn-after-reading and SSE live updates. Machine clients authenticate with a bearer token from a 0600 file, or a an authenticating proxy service token."
+  },
+  "servers": [
+    {
+      "url": "https://paste.example.com"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "File": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "public id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        }
+      },
+      "Match": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "enum": [
+              "title",
+              "files",
+              "text"
+            ]
+          },
+          "snippet": {
+            "type": "string",
+            "description": "matched fragment; U+0001/U+0002 wrap the hit"
+          }
+        }
+      },
+      "Paste": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "images",
+              "files",
+              "mixed"
+            ]
+          },
+          "text_bytes": {
+            "type": "integer"
+          },
+          "file_bytes": {
+            "type": "integer"
+          },
+          "file_count": {
+            "type": "integer"
+          },
+          "views": {
+            "type": "integer"
+          },
+          "burn": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            }
+          },
+          "match": {
+            "$ref": "#/components/schemas/Match"
+          }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Paste"
+            }
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "took_ms": {
+            "type": "integer"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "E_NOT_FOUND"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "liveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "dependencies",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ready"
+          },
+          "503": {
+            "description": "database or content volume unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/pastes": {
+      "get": {
+        "summary": "list or search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "expires_in": {
+                    "type": "integer",
+                    "description": "seconds; 0 = never"
+                  },
+                  "burn": {
+                    "type": "boolean"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paste"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "purge every paste",
+        "responses": {
+          "200": {
+            "description": "{deleted: n}"
+          }
+        }
+      }
+    },
+    "/api/v1/pastes/{slug}": {
+      "get": {
+        "summary": "read",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "paste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paste"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "burn paste: use /reveal"
+          },
+          "410": {
+            "description": "burned or expired"
+          }
+        }
+      },
+      "put": {
+        "summary": "replace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "delete one",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "deleted"
+          }
+        }
+      }
+    },
+    "/api/v1/pastes/{slug}/raw": {
+      "get": {
+        "summary": "plain text body",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/plain"
+          }
+        }
+      }
+    },
+    "/api/v1/pastes/{slug}/files/{id}": {
+      "get": {
+        "summary": "stream a file",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "0",
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "bytes",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pastes/{slug}/reveal": {
+      "post": {
+        "summary": "burn: return the payload and delete it",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "payload"
+          },
+          "410": {
+            "description": "already revealed"
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "summary": "SSE: paste.created|updated|deleted|purged",
+        "responses": {
+          "200": {
+            "description": "text/event-stream"
+          }
+        }
+      }
+    }
+  }
+}

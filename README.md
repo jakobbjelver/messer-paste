@@ -22,16 +22,32 @@ root and row/dir drift.
 
 | Method | Path | |
 |---|---|---|
-| GET | `/api/pastes` | list (no bodies) |
-| POST | `/api/pastes` | create (multipart: `title`, `text`, `language`, `expires_in`, `burn`, `file`) |
-| GET | `/api/pastes/{slug}` | detail; `409` for an unrevealed burn paste |
-| PUT | `/api/pastes/{slug}` | replace; repeated `keep` ids retain files |
-| DELETE | `/api/pastes/{slug}` | delete one |
-| DELETE | `/api/pastes` | purge all |
-| GET | `/api/pastes/{slug}/raw` | text body |
-| GET | `/api/pastes/{slug}/files/{id}` | stream a file (`?download=1` forces attachment) |
-| POST | `/api/pastes/{slug}/reveal` | burn: return payload, delete, `410` after |
-| GET | `/api/events` | SSE: `paste.created|updated|deleted|purged` |
+| GET | `/api/v1/pastes` | page or search: `?q=&limit=&cursor=` → `items, next_cursor, has_more, total, took_ms` |
+| POST | `/api/v1/pastes` | create (multipart; `Idempotency-Key` honoured) |
+| GET | `/api/v1/pastes/{slug}` | detail; `409` for an unrevealed burn paste |
+| PUT | `/api/v1/pastes/{slug}` | replace; repeated `keep` public ids retain files |
+| DELETE | `/api/v1/pastes/{slug}` | delete one |
+| DELETE | `/api/v1/pastes` | purge all |
+| GET | `/api/v1/pastes/{slug}/raw` | text body |
+| GET | `/api/v1/pastes/{slug}/files/{id}` | stream a file by public id (`?download=1` forces attachment) |
+| POST | `/api/v1/pastes/{slug}/reveal` | burn: return payload, delete, `410` after |
+| GET | `/api/v1/events` | SSE: `paste.created|updated|deleted|purged` |
+| GET | `/api/v1/openapi.json` · `/llms.txt` | the contract, and the primer an agent reads first |
+
+Titles are derived when you do not supply one: the first line of the text, `report.pdf`, `3 images`,
+or `crash loop + 1 image`. Search covers titles, filenames and the body, and each hit carries the
+fragment it matched on.
+
+## Agent interface
+
+```bash
+paste put - -t "build log" --expires 7d     # stdin → URL
+paste get latest                           # the last paste, text and file list
+paste ls -q arm64                          # search with match snippets
+```
+
+On the host that runs the container, `docker exec -i messer-paste messer-paste put -` needs no token;
+from anywhere else set `PASTE_URL` and a bearer token (or a an authenticating proxy service token).
 
 Expiry is `expires_in` seconds (`0` = never). Burn pastes are capped at 10 MB because the reveal
 returns the payload inline.

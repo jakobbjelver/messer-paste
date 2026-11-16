@@ -3,6 +3,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 
 import { AppShell, type NavItem } from "@/components/ui/app-shell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { GlobalSearch } from "@/components/global-search";
 import { Mark } from "@/components/mark";
 import { LiveContext, useLiveEvents } from "@/hooks/use-live-events";
 import { useTheme } from "@/hooks/use-theme";
@@ -47,6 +48,7 @@ export function Shell() {
         linkComponent={linkComponent}
         actions={
           <>
+            {pathname === "/ui" ? null : <GlobalSearch />}
             <ThemeToggle dark={dark} onToggle={toggle} />
           </>
         }

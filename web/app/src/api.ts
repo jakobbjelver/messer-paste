@@ -1,11 +1,13 @@
 export type PasteKind = "text" | "images" | "files" | "mixed";
 
 export type PasteFile = {
-  id: number;
+  id: string;
   name: string;
   mime: string;
   size: number;
 };
+
+export type Match = { field: "title" | "files" | "text"; snippet: string };
 
 export type PasteRow = {
   slug: string;
@@ -20,9 +22,18 @@ export type PasteRow = {
   expiresAt: number | null;
   createdAt: number;
   updatedAt: number;
+  match?: Match;
 };
 
 export type PasteDetail = PasteRow & { text: string; files: PasteFile[] };
+
+export type PastePage = {
+  items: PasteRow[];
+  nextCursor: string;
+  hasMore: boolean;
+  total: number;
+  tookMs: number;
+};
 
 export type RevealPayload = {
   title: string;
@@ -31,42 +42,120 @@ export type RevealPayload = {
   files: Array<{ name: string; mime: string; data: string }>;
 };
 
+type WireFile = { id: string; name: string; mime: string; size: number };
+type WireMatch = { field: Match["field"]; snippet: string };
+type WirePaste = {
+  slug: string;
+  title: string;
+  language: string;
+  kind: PasteKind;
+  text_bytes: number;
+  file_bytes: number;
+  file_count: number;
+  views: number;
+  burn: boolean;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  text?: string;
+  files?: WireFile[];
+  match?: WireMatch | null;
+};
+
 export class ApiError extends Error {
   status: number;
   code: string;
-  constructor(status: number, code: string) {
-    super(code);
+  constructor(status: number, code: string, message?: string) {
+    super(message || code);
     this.status = status;
     this.code = code;
   }
 }
 
+const unix = (iso: string | null | undefined): number | null => {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+};
+
+function toPaste(wire: WirePaste): PasteRow {
+  return {
+    slug: wire.slug,
+    title: wire.title,
+    language: wire.language,
+    kind: wire.kind,
+    textBytes: wire.text_bytes,
+    fileBytes: wire.file_bytes,
+    fileCount: wire.file_count,
+    views: wire.views,
+    burn: wire.burn,
+    expiresAt: unix(wire.expires_at),
+    createdAt: unix(wire.created_at) ?? 0,
+    updatedAt: unix(wire.updated_at) ?? 0,
+    ...(wire.match ? { match: { field: wire.match.field, snippet: wire.match.snippet } } : {}),
+  };
+}
+
+function toDetail(wire: WirePaste): PasteDetail {
+  return {
+    ...toPaste(wire),
+    text: wire.text ?? "",
+    files: wire.files ?? [],
+  };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
-    let code = res.statusText || "request_failed";
+    let code = "E_INTERNAL";
+    let message = res.statusText;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) code = body.error;
+      const body = (await res.json()) as { error?: { code?: string; message?: string } };
+      if (body?.error?.code) code = body.error.code;
+      if (body?.error?.message) message = body.error.message;
     } catch {
       /* not JSON */
     }
-    throw new ApiError(res.status, code);
+    throw new ApiError(res.status, code, message);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
+export type ListParams = { q?: string; limit?: number; cursor?: string };
+
 export const api = {
-  list: () => request<PasteRow[]>("/api/pastes"),
-  get: (slug: string) => request<PasteDetail>(`/api/pastes/${slug}`),
-  create: (form: FormData) => request<PasteDetail>("/api/pastes", { method: "POST", body: form }),
-  update: (slug: string, form: FormData) =>
-    request<PasteDetail>(`/api/pastes/${slug}`, { method: "PUT", body: form }),
-  remove: (slug: string) => request<void>(`/api/pastes/${slug}`, { method: "DELETE" }),
-  purge: () => request<{ deleted: number }>("/api/pastes", { method: "DELETE" }),
-  reveal: (slug: string) => request<RevealPayload>(`/api/pastes/${slug}/reveal`, { method: "POST" }),
-  rawUrl: (slug: string) => `/api/pastes/${slug}/raw`,
-  fileUrl: (slug: string, id: number, download = false) =>
-    `/api/pastes/${slug}/files/${id}${download ? "?download=1" : ""}`,
+  list: async (params: ListParams = {}): Promise<PastePage> => {
+    const search = new URLSearchParams();
+    if (params.q) search.set("q", params.q);
+    if (params.limit) search.set("limit", String(params.limit));
+    if (params.cursor) search.set("cursor", params.cursor);
+    const query = search.toString();
+    const wire = await request<{
+      items: WirePaste[];
+      next_cursor: string;
+      has_more: boolean;
+      total: number;
+      took_ms: number;
+    }>("/api/v1/pastes" + (query ? `?${query}` : ""));
+    return {
+      items: wire.items.map(toPaste),
+      nextCursor: wire.next_cursor,
+      hasMore: wire.has_more,
+      total: wire.total,
+      tookMs: wire.took_ms,
+    };
+  },
+  get: async (slug: string) => toDetail(await request<WirePaste>(`/api/v1/pastes/${slug}`)),
+  create: async (form: FormData) =>
+    toDetail(await request<WirePaste>("/api/v1/pastes", { method: "POST", body: form })),
+  update: async (slug: string, form: FormData) =>
+    toDetail(await request<WirePaste>(`/api/v1/pastes/${slug}`, { method: "PUT", body: form })),
+  remove: (slug: string) => request<void>(`/api/v1/pastes/${slug}`, { method: "DELETE" }),
+  purge: () => request<{ deleted: number }>("/api/v1/pastes", { method: "DELETE" }),
+  reveal: (slug: string) =>
+    request<RevealPayload>(`/api/v1/pastes/${slug}/reveal`, { method: "POST" }),
+  rawUrl: (slug: string) => `/api/v1/pastes/${slug}/raw`,
+  fileUrl: (slug: string, id: string, download = false) =>
+    `/api/v1/pastes/${slug}/files/${id}${download ? "?download=1" : ""}`,
 };

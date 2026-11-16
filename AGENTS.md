@@ -39,7 +39,8 @@ make lint       # fmt-check + vet
 make typecheck  # tsc -b --noEmit
 make build      # web + Go binary in bin/
 make check      # fmt-check + vet + race + typecheck
-make doctor     # db, content root, row/dir reconciliation, free space
+make doctor     # db, content root, row/dir reconciliation, index, free space
+make install-client  # `paste` on PATH (the machine client)
 ```
 
 Every command is non-interactive and exits non-zero on failure.
@@ -50,10 +51,20 @@ Every command is non-interactive and exits non-zero on failure.
   (`${SERVER_CONFIGS_DIR}/apps/paste/data`). A reset of one must be reconcilable from the other.
 - The container publishes no host port. Caddy reaches `messer-paste:8080` on `server_network`.
 - Expiry, burn and purge delete permanently. There is no trash and no restore.
-- `/api/events` is the only EventSource in the app; the `/ui` sink never opens one (the conformance
+- The API is `/api/v1`, JSON in/out, RFC 3339 UTC timestamps, errors shaped
+  `{"error":{"code","message"}}` with a stable `E_*` code. `docs/openapi.json` is part of the
+  contract; a breaking change is a version bump.
+- Files are addressed by `public_id`, never by the row id. Slugs and file ids share the same
+  31-character alphabet.
+- Search is SQLite FTS5 (trigram) and is written in the same transaction as the row. A paste whose
+  body is not in the index is a bug, and `doctor` reports index drift.
+- `/api/v1/events` is the only EventSource in the app; the `/ui` sink never opens one (the conformance
   harness waits for `networkidle`).
 - No auth in the app. an authenticating proxy is the gate; a 200 from an unauthenticated public request
-  is a security bug.
+  is a security bug. Machine clients use a bearer token from a `0600` file or a CF service token —
+  never a checked-in `.env`.
+- An agent creates pastes through `paste put` or the API, never by writing into
+  `/content`.
 - Uploads are streamed to a staging dir, committed by rename/copy, and every name passes `SafeName`.
 
 ## Working rules

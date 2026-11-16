@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { Link, useSearch } from "@tanstack/react-router";
 import {
   Clock,
   FileText,
@@ -8,10 +8,10 @@ import {
   Fire,
   ImageSquare,
   Infinity as InfinityIcon,
-  MagnifyingGlass,
   Trash,
   Warning,
 } from "@phosphor-icons/react";
+import { toast } from "sonner";
 
 import { api, type PasteRow } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
@@ -19,10 +19,10 @@ import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useLive } from "@/hooks/use-live-events";
-import { toast } from "sonner";
 import { ago, bytes, expiringSoon, remaining } from "@/lib/format";
 
-const COLUMNS = "grid-cols-[minmax(0,1fr)_96px_72px_84px] md:grid-cols-[minmax(0,1fr)_110px_76px_72px_96px]";
+const COLUMNS =
+  "grid-cols-[minmax(0,1fr)_96px_72px_84px] md:grid-cols-[minmax(0,1fr)_110px_76px_72px_96px]";
 
 function kindIcon(kind: string) {
   switch (kind) {
@@ -72,25 +72,61 @@ function Expiry({ row }: { row: PasteRow }) {
   );
 }
 
+/** The server marks matches with \u0001/\u0002 so the fragment never carries markup. */
+function Snippet({ text }: { text: string }) {
+  const parts = useMemo(() => text.split(/(\u0001[^\u0002]*\u0002)/g), [text]);
+  return (
+    <span className="line-clamp-2 text-xs leading-relaxed text-[var(--text-3)]">
+      {parts.map((part, index) =>
+        part.startsWith("\u0001") ? (
+          <mark
+            key={index}
+            className="bg-[color-mix(in_oklab,var(--warning)_30%,transparent)] px-0.5 text-[var(--foreground)]"
+          >
+            {part.slice(1, -1)}
+          </mark>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </span>
+  );
+}
+
 export function RecentPage() {
-  const navigate = useNavigate();
+  const { q } = useSearch({ from: "/recent" });
+  const search = q ?? "";
   const live = useLive();
-  const { data = [], isLoading, isError } = useQuery({ queryKey: ["pastes"], queryFn: api.list });
-  const [search, setSearch] = useState("");
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+
+  const list = useInfiniteQuery({
+    queryKey: ["pastes", search],
+    queryFn: ({ pageParam }) =>
+      api.list({ q: search || undefined, cursor: pageParam || undefined, limit: 50 }),
+    initialPageParam: "",
+    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+  });
+
+  const rows = useMemo(() => list.data?.pages.flatMap((page) => page.items) ?? [], [list.data]);
+  const total = list.data?.pages[0]?.total ?? 0;
+  const took = list.data?.pages[0]?.tookMs ?? 0;
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    const node = sentinel.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !list.isFetchingNextPage && list.hasNextPage) {
+          void list.fetchNextPage();
+        }
+      },
+      { rootMargin: "400px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [list]);
 
   useEffect(() => {
     if (!live.last?.slug) return;
@@ -99,15 +135,7 @@ export function RecentPage() {
     return () => window.clearTimeout(timer);
   }, [live.last]);
 
-  const rows = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return data;
-    return data.filter(
-      (row) => row.title.toLowerCase().includes(needle) || row.slug.toLowerCase().includes(needle),
-    );
-  }, [data, search]);
-
-  const total = data.reduce((sum, row) => sum + row.textBytes + row.fileBytes, 0);
+  const stored = rows.reduce((sum, row) => sum + row.textBytes + row.fileBytes, 0);
 
   async function purge() {
     setPurgeOpen(false);
@@ -122,123 +150,99 @@ export function RecentPage() {
   return (
     <PageContainer className="py-7">
       <PageHead
-        eyebrow="Archive"
-        title="Recent"
+        eyebrow={`${total} ${total === 1 ? "paste" : "pastes"}${search ? ` · ${took} ms` : ""}`}
+        title={search ? `Results for “${search}”` : "Recent"}
+        meta={
+          <>
+            <span>{bytes(stored)} stored</span>
+            <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
+            <span>newest first</span>
+          </>
+        }
         actions={
-          <button
-            type="button"
-            onClick={() => setPurgeOpen(true)}
-            disabled={data.length === 0}
-            className="inline-flex h-8 cursor-pointer items-center gap-2 border border-[color-mix(in_oklab,var(--destructive)_42%,var(--border))] bg-[var(--surface)] px-3 text-sm text-[var(--destructive)] hover:bg-[color-mix(in_oklab,var(--destructive)_9%,transparent)] disabled:cursor-not-allowed disabled:border-[var(--border-strong)] disabled:text-[var(--text-3)]"
-          >
-            <Trash size={16} aria-hidden="true" />
-            Purge all
-          </button>
+          rows.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setPurgeOpen(true)}
+              className="inline-flex h-8 cursor-pointer items-center gap-2 border border-[color-mix(in_oklab,var(--destructive)_42%,var(--border))] bg-[var(--surface)] px-3 text-sm text-[var(--destructive)] hover:bg-[color-mix(in_oklab,var(--destructive)_9%,transparent)]"
+            >
+              <Trash size={14} aria-hidden="true" />
+              Purge all
+            </button>
+          ) : null
         }
       />
 
-      <div className="mb-4 flex items-center gap-2">
-        <label className="relative flex w-full max-w-[280px] items-center">
-          <MagnifyingGlass
-            size={16}
-            className="pointer-events-none absolute left-2.5 text-[var(--text-3)]"
-            aria-hidden="true"
-          />
-          <input
-            ref={searchRef}
-            id="recent-search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search pastes"
-            aria-label="Search pastes"
-            className="h-8 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2.5 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)]"
-          />
-        </label>
-      </div>
-
-      {isError ? (
-        <EmptyState title="Could not load" description="The API did not answer. Check /readyz." />
-      ) : isLoading ? (
-        <div className="h-[52px] border border-[var(--border)] bg-[var(--surface-2)]" />
+      {list.isLoading ? (
+        <p className="text-sm text-[var(--text-3)]">Loading…</p>
+      ) : list.isError ? (
+        <p className="text-sm text-[var(--destructive)]">The archive could not be loaded.</p>
       ) : rows.length === 0 ? (
         <EmptyState
-          title={data.length === 0 ? "No pastes" : "No matches"}
+          title={search ? "No matches" : "Nothing here yet"}
           description={
-            data.length === 0
-              ? "Everything is gone. New paste, or wait for one to arrive."
-              : "Nothing matches that search."
-          }
-          action={
-            <Link
-              to="/"
-              search={{ duplicate: undefined }}
-              className="inline-flex h-8 items-center gap-2 border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm no-underline text-[var(--foreground)] hover:bg-[var(--surface-2)]"
-            >
-              New paste
-            </Link>
+            search
+              ? `Nothing matched “${search}” in a title, a filename or the text.`
+              : "Pastes you create appear here."
           }
         />
       ) : (
         <div className="border border-[var(--border)] bg-[var(--surface)]">
           <div
-            className={`grid h-9 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-2)] px-3 ${COLUMNS}`}
+            className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-2`}
           >
             <span className="m-label">Paste</span>
-            <span className="m-label hidden md:block">Kind</span>
-            <span className="m-label hidden text-right md:block">Size</span>
-            <span className="m-label text-right">Updated</span>
-            <span className="m-label text-right">Expires</span>
+            <span className="m-label">Kind</span>
+            <span className="m-label hidden md:block">Updated</span>
+            <span className="m-label">Expires</span>
+            <span className="m-label hidden md:block text-right">Size</span>
           </div>
           {rows.map((row) => (
-            <div
+            <Link
               key={row.slug}
-              onClick={() => navigate({ to: "/$slug", params: { slug: row.slug } })}
-              className={`grid h-[52px] cursor-pointer items-center gap-3 border-b border-[var(--border)] px-3 last:border-b-0 hover:bg-[var(--surface-2)] ${COLUMNS} ${
-                flash === row.slug ? "row-flash" : ""
+              to="/$slug"
+              params={{ slug: row.slug }}
+              className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-3 text-[var(--foreground)] no-underline last:border-b-0 hover:bg-[var(--surface-2)] ${
+                flash === row.slug ? "bg-[var(--surface-2)]" : ""
               }`}
-              role="row"
             >
-              <span className="grid min-w-0 gap-0.5">
-                <Link
-                  to="/$slug"
-                  params={{ slug: row.slug }}
-                  onClick={(event) => event.stopPropagation()}
-                  className="truncate text-sm text-[var(--foreground)] no-underline hover:underline"
-                >
-                  {row.title || "Untitled paste"}
-                </Link>
-                <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
-                  {row.slug}
-                  {row.burn ? " · burn" : ""}
-                </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm">{row.title}</span>
+                {row.match ? (
+                  <span className="mt-1 block">
+                    <span className="mr-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+                      {row.match.field === "files" ? "file" : row.match.field}
+                    </span>
+                    <Snippet text={row.match.snippet} />
+                  </span>
+                ) : null}
               </span>
-              <span className="hidden md:block">
-                <Kind kind={row.kind} />
-              </span>
-              <span className="hidden text-right font-mono text-[11px] text-[var(--text-2)] md:block">
-                {bytes(row.textBytes + row.fileBytes)}
-              </span>
-              <span className="text-right font-mono text-[11px] text-[var(--text-2)]">
+              <Kind kind={row.kind} />
+              <span className="hidden font-mono text-[11px] text-[var(--text-3)] md:block">
                 {ago(row.updatedAt)}
               </span>
-              <span className="justify-self-end">
-                <Expiry row={row} />
+              <Expiry row={row} />
+              <span className="hidden text-right font-mono text-[11px] text-[var(--text-3)] md:block">
+                {bytes(row.textBytes + row.fileBytes)}
               </span>
-            </div>
+            </Link>
           ))}
-          <div className="flex h-9 items-center justify-between border-t border-[var(--border)] px-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
-            <span>
-              {data.length} {data.length === 1 ? "paste" : "pastes"} · {bytes(total)} stored
-            </span>
-            <span>{rows.length} shown</span>
+          <div ref={sentinel} className="grid h-10 place-items-center">
+            {list.isFetchingNextPage ? (
+              <span className="font-mono text-[11px] text-[var(--text-3)]">Loading…</span>
+            ) : !list.hasNextPage && rows.length > 0 ? (
+              <span className="font-mono text-[11px] text-[var(--text-3)]">
+                {search ? `${total} ${total === 1 ? "match" : "matches"}` : `End of archive · ${total}`}
+              </span>
+            ) : null}
           </div>
         </div>
       )}
 
       <ConfirmDialog
         open={purgeOpen}
-        title="Purge all pastes?"
-        body={`All ${data.length} ${data.length === 1 ? "paste" : "pastes"} and their files will be permanently deleted. This cannot be undone.`}
+        title="Purge every paste?"
+        body={`All ${total} pastes and their files will be permanently deleted. This cannot be undone.`}
         confirmLabel="Purge all"
         danger
         onConfirm={() => void purge()}

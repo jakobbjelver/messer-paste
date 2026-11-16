@@ -5,7 +5,7 @@ import type { PasteDetail } from "@/api";
 
 export type DraftFile = {
   key: string;
-  id?: number;
+  id?: string;
   name: string;
   mime: string;
   size: number;

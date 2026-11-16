@@ -13,6 +13,7 @@ import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
+import { deriveTitle } from "@/lib/title";
 import { absolute, bytes } from "@/lib/format";
 
 export type ComposerMode = "create" | "edit";
@@ -160,7 +161,7 @@ export function ComposerScreen({
           <input
             value={draft.title}
             onChange={(event) => set({ title: event.target.value })}
-            placeholder="Untitled paste"
+            placeholder={deriveTitle(draft.text, draft.files)}
             aria-label="Title"
             className="h-9 w-full min-w-[12ch] bg-transparent font-sans text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)]"
           />

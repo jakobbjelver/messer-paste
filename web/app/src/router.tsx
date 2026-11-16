@@ -22,6 +22,8 @@ const indexRoute = createRoute({
 const recentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recent",
+  validateSearch: (search: Record<string, unknown>): { q?: string } =>
+    typeof search.q === "string" && search.q ? { q: search.q } : {},
   component: RecentPage,
 });
 

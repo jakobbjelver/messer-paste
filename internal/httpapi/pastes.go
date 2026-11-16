@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -17,12 +19,23 @@ import (
 )
 
 func (s *Server) listPastes(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.svc.List(r.Context())
+	started := time.Now()
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if value, err := strconv.Atoi(raw); err == nil {
+			limit = value
+		}
+	}
+	result, err := s.svc.List(r.Context(), paste.ListOptions{
+		Query:  r.URL.Query().Get("q"),
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
+	})
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	writeJSON(w, http.StatusOK, dtoList(result, time.Since(started)))
 }
 
 func (s *Server) getPaste(w http.ResponseWriter, r *http.Request) {
@@ -31,10 +44,18 @@ func (s *Server) getPaste(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	writeJSON(w, http.StatusOK, dtoPaste(p))
 }
 
 func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("Idempotency-Key")
+	if body, found, err := s.store.Idempotent(r.Context(), key); err == nil && found {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Idempotent-Replay", "true")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write(body)
+		return
+	}
 	fields, files, cleanup, err := s.parse(w, r)
 	defer cleanup()
 	if err != nil {
@@ -54,7 +75,13 @@ func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, p)
+	body, err := json.Marshal(dtoPaste(p))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	_ = s.store.SaveIdempotent(r.Context(), key, body)
+	writeJSONBytes(w, http.StatusCreated, body)
 }
 
 func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
@@ -75,12 +102,8 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, raw := range strings.Split(fields["keep"], ",") {
 		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
-			in.Keep = append(in.Keep, id)
+		if raw != "" {
+			in.Keep = append(in.Keep, raw)
 		}
 	}
 	p, err := s.svc.Update(r.Context(), slug, in)
@@ -88,7 +111,7 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	writeJSON(w, http.StatusOK, dtoPaste(p))
 }
 
 func (s *Server) deletePaste(w http.ResponseWriter, r *http.Request) {
@@ -121,9 +144,9 @@ func (s *Server) rawPaste(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) filePaste(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found")
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusNotFound, "E_NOT_FOUND")
 		return
 	}
 	handle, file, err := s.svc.File(r.Context(), slugOf(r), id)

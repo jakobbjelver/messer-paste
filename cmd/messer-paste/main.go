@@ -60,6 +60,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if indexed, err := svc.BackfillSearch(ctx); err != nil {
+		log.Warn("search backfill failed", "err", err)
+	} else if indexed > 0 {
+		log.Info("search index rebuilt", "rows", indexed)
+	}
+
 	if result, err := svc.Reconcile(ctx); err != nil {
 		log.Warn("reconcile", "err", err)
 	} else if result != (paste.ReconcileResult{}) {
