@@ -146,19 +146,22 @@ export function PasteOptions({
           id="commit"
           disabled={pending || (!draft.text.trim() && draft.files.length === 0)}
           onClick={onSubmit}
-          className="relative inline-flex h-9 w-full cursor-pointer items-center justify-center bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:border disabled:border-[var(--border-strong)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)]"
+          className="grid h-9 w-full cursor-pointer grid-cols-[1fr_auto_1fr] items-center gap-2 bg-[var(--primary)] px-2 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:border disabled:border-[var(--border-strong)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)]"
         >
-          {pending ? "Saving…" : ctaLabel}
+          <span aria-hidden="true" />
+          <span className="truncate">{pending ? "Saving…" : ctaLabel}</span>
           {!pending ? (
-            <span className="absolute right-2 flex items-center gap-1" aria-hidden="true">
+            <span className="flex items-center justify-self-end" aria-hidden="true">
               <kbd className="m-kbd border-[color-mix(in_oklab,var(--primary-foreground)_28%,transparent)] bg-transparent text-[var(--primary-foreground)] opacity-80">
                 {modKey()}
               </kbd>
-              <kbd className="m-kbd border-[color-mix(in_oklab,var(--primary-foreground)_28%,transparent)] bg-transparent text-[var(--primary-foreground)] opacity-80">
+              <kbd className="m-kbd -ml-px border-[color-mix(in_oklab,var(--primary-foreground)_28%,transparent)] bg-transparent text-[var(--primary-foreground)] opacity-80">
                 {enterKey()}
               </kbd>
             </span>
-          ) : null}
+          ) : (
+            <span aria-hidden="true" />
+          )}
         </button>
       </div>
     </aside>

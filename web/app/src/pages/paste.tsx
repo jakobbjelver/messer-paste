@@ -99,17 +99,22 @@ export function PastePage() {
     return (
       <PageContainer className="py-7">
         <PageHead eyebrow={slug} title="Burn after reading" />
-        <div className="grid max-w-[520px] gap-4 border border-[var(--border)] bg-[var(--surface)] p-6">
-          <Fire size={28} className="text-[var(--text-3)]" aria-hidden="true" />
-          <p className="m-0 text-sm text-[var(--text-2)]">
-            Opening this paste consumes it. It is removed for every device, and there is no second
-            read.
-          </p>
+        <div className="mx-auto grid max-w-[420px] justify-items-center gap-5 border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
+          <span className="grid size-11 place-items-center border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-2)]">
+            <Fire size={20} aria-hidden="true" />
+          </span>
+          <div className="grid gap-2">
+            <h2 className="m-0 font-mono text-base font-medium text-[var(--foreground)]">Read once</h2>
+            <p className="m-0 max-w-[34ch] text-sm leading-relaxed text-[var(--text-2)]">
+              Opening this paste consumes it. It is removed on every device, and there is no second
+              read.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => reveal.mutate()}
             disabled={reveal.isPending}
-            className="inline-flex h-9 w-fit cursor-pointer items-center bg-[var(--primary)] px-4 text-sm font-medium text-[var(--primary-fg)] hover:bg-[var(--primary-hover)] disabled:opacity-60"
+            className="inline-flex h-9 min-w-[132px] cursor-pointer items-center justify-center bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {reveal.isPending ? "Revealing…" : "Reveal"}
           </button>

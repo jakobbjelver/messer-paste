@@ -16,7 +16,8 @@ export function deriveTitle(
 
 function firstLine(text: string): string {
   for (const raw of text.split("\n")) {
-    const line = raw.trim().replace(/^[#>*-`\s]+/, "").replace(/\s+/g, " ").trim();
+    // The dash must stay last: `[#>*-`]` is a RANGE from * to backtick, which is A-Z.
+    const line = raw.trim().replace(/^[#>*`\s-]+/, "").replace(/\s+/g, " ").trim();
     if (line) return clip(line);
   }
   return "";
@@ -39,4 +40,13 @@ function filePhrase(files: Array<{ mime: string }>): string {
 
 function plural(n: number, word: string): string {
   return n === 1 ? `1 ${word}` : `${n} ${word}s`;
+}
+
+/** Shorter than the stored title, so the placeholder never clips mid-word in the field. */
+export function previewTitle(text: string, files: Array<{ name: string; mime: string }>): string {
+  const full = deriveTitle(text, files);
+  if (full.length <= 46) return full;
+  const cut = full.replace(/…$/, "").slice(0, 46);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 32 ? cut.slice(0, space) : cut).replace(/[ ,.;:]+$/, "")}…`;
 }

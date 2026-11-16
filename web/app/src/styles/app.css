@@ -136,8 +136,7 @@
 /* sonner ships its own reset with a 13px/8px default; the canon toast is square, mono, 12px. */
 [data-sonner-toast] {
   border-radius: 0 !important;
-  font-family: var(--font-jetbrains) !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
   line-height: 1.4 !important;
 }
 [data-sonner-toast] [data-description] {

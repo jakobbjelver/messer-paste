@@ -31,7 +31,7 @@ export function Toaster({ dark, ...props }: ToasterProps & { dark: boolean }) {
       toastOptions={{
         classNames: {
           toast:
-            "rounded-none border border-[var(--border-strong)] bg-[var(--surface)] font-mono text-xs text-[var(--foreground)] shadow-[var(--shadow-pop)]",
+            "rounded-none border border-[var(--border-strong)] bg-[var(--surface)] font-sans text-[13px] text-[var(--foreground)] shadow-[var(--shadow-pop)]",
           description: "text-[var(--text-2)]",
           actionButton: "rounded-none border border-[var(--border-strong)] bg-[var(--surface-2)] font-mono text-xs",
           cancelButton: "rounded-none border border-[var(--border-strong)] bg-[var(--surface)] font-mono text-xs",

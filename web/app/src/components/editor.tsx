@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { highlight } from "@/lib/highlight";
 import type { LanguageId } from "@/lib/language";
@@ -31,7 +31,7 @@ export function Editor({
   const lines = value === "" ? 1 : value.split("\n").length;
   const numbers = Array.from({ length: Math.min(lines, 20_000) }, (_, i) => i + 1).join("\n");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (autoFocus) sourceRef.current?.focus();
   }, [autoFocus]);
 

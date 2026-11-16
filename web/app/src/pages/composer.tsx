@@ -13,7 +13,7 @@ import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
-import { deriveTitle } from "@/lib/title";
+import { previewTitle } from "@/lib/title";
 import { absolute, bytes } from "@/lib/format";
 
 export type ComposerMode = "create" | "edit";
@@ -139,13 +139,31 @@ export function ComposerScreen({
       addFiles(files);
       toast(`${files.length} ${files.length === 1 ? "file" : "files"} attached`);
     };
+    // A fast typist can beat the auto-focus (and a click on the card does not focus the textarea).
+    // Take the character that landed outside a field, put it where it was meant to go, and focus.
+    const onFreeKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.key.length !== 1) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+      if (active?.isContentEditable) return;
+      const source = document.getElementById("paste-source") as HTMLTextAreaElement | null;
+      if (!source) return;
+      event.preventDefault();
+      set({ text: `${draft.text}${event.key}` });
+      source.focus();
+      requestAnimationFrame(() => {
+        source.selectionStart = source.selectionEnd = source.value.length;
+      });
+    };
     window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onFreeKey);
     window.addEventListener("paste", onPaste);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onFreeKey);
       window.removeEventListener("paste", onPaste);
     };
-  }, [addFiles, submit]);
+  }, [addFiles, draft.text, set, submit]);
 
   const onFiles = (files: File[]) => {
     if (files.length === 0) return;
@@ -161,9 +179,9 @@ export function ComposerScreen({
           <input
             value={draft.title}
             onChange={(event) => set({ title: event.target.value })}
-            placeholder={deriveTitle(draft.text, draft.files)}
+            placeholder={previewTitle(draft.text, draft.files)}
             aria-label="Title"
-            className="h-9 w-full min-w-[12ch] bg-transparent font-sans text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)]"
+            className="h-9 w-full min-w-[12ch] truncate bg-transparent font-sans text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)] text-ellipsis outline-none placeholder:text-[var(--text-3)]"
           />
         }
         meta={

@@ -93,6 +93,31 @@ function Snippet({ text }: { text: string }) {
   );
 }
 
+function SkeletonRow() {
+  return (
+    <div className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-3 last:border-b-0`}>
+      <span className="grid gap-1.5">
+        <span className="h-3.5 w-[46%] bg-[var(--surface-2)]" />
+        <span className="h-2.5 w-[64%] bg-[var(--surface-2)]" />
+      </span>
+      <span className="h-3 w-12 bg-[var(--surface-2)]" />
+      <span className="hidden h-3 w-10 bg-[var(--surface-2)] md:block" />
+      <span className="h-3 w-14 bg-[var(--surface-2)]" />
+      <span className="hidden h-3 w-10 justify-self-end bg-[var(--surface-2)] md:block" />
+    </div>
+  );
+}
+
+function SkeletonTable({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--surface)]" aria-busy="true" aria-live="polite">
+      {Array.from({ length: rows }, (_, index) => (
+        <SkeletonRow key={index} />
+      ))}
+    </div>
+  );
+}
+
 export function RecentPage() {
   const { q } = useSearch({ from: "/recent" });
   const search = q ?? "";
@@ -174,7 +199,7 @@ export function RecentPage() {
       />
 
       {list.isLoading ? (
-        <p className="text-sm text-[var(--text-3)]">Loading…</p>
+        <SkeletonTable rows={6} />
       ) : list.isError ? (
         <p className="text-sm text-[var(--destructive)]">The archive could not be loaded.</p>
       ) : rows.length === 0 ? (
@@ -227,10 +252,14 @@ export function RecentPage() {
               </span>
             </Link>
           ))}
+          {list.isFetchingNextPage ? (
+            <>
+              <SkeletonRow />
+              <SkeletonRow />
+            </>
+          ) : null}
           <div ref={sentinel} className="grid h-10 place-items-center">
-            {list.isFetchingNextPage ? (
-              <span className="font-mono text-[11px] text-[var(--text-3)]">Loading…</span>
-            ) : !list.hasNextPage && rows.length > 0 ? (
+            {!list.hasNextPage && rows.length > 0 ? (
               <span className="font-mono text-[11px] text-[var(--text-3)]">
                 {search ? `${total} ${total === 1 ? "match" : "matches"}` : `End of archive · ${total}`}
               </span>
