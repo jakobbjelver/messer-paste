@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@import "./messer/theme.css";
+@import "./messer/type.css";
+@import "./messer/utilities.css";
+@import "./messer/recipes.css";
+@import "./messer/brand.css";
+@import "./fonts.css";
+
+/* Code tokens. The canon has no string colour; the mockup's whisper-of-blue is carried here as the
+   one app-local token, per the handover. */
+:root {
+  --code-str: oklch(0.42 0.03 245);
+}
+.dark {
+  --code-str: oklch(0.78 0.03 245);
+}
+
+/* Editor: a transparent textarea over a highlighted mirror, with a line gutter. */
+.ed-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  outline: none;
+}
+.ed-body:focus-within {
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+.ed-gutter {
+  width: 52px;
+  flex: none;
+  overflow: hidden;
+  padding: 12px 8px 12px 0;
+  border-right: 1px solid var(--border);
+  text-align: right;
+  font-family: var(--font-jetbrains);
+  font-size: 12.5px;
+  line-height: 21px;
+  color: var(--text-3);
+  user-select: none;
+  white-space: pre;
+}
+.ed-pane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.ed-hl,
+.ed-src {
+  font-family: var(--font-jetbrains);
+  font-size: 12.5px;
+  line-height: 21px;
+  tab-size: 2;
+  padding: 12px 16px;
+  margin: 0;
+}
+.ed-hl {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  pointer-events: none;
+  white-space: pre;
+  color: var(--foreground);
+}
+.ed-src {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--foreground);
+  white-space: pre;
+  overflow: auto;
+}
+.ed-src::placeholder {
+  color: var(--text-3);
+}
+.ed-src::selection {
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+}
+.ed-body[data-wrap="on"] .ed-hl,
+.ed-body[data-wrap="on"] .ed-src {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ed-body[data-wrap="on"] .ed-gutter {
+  display: none;
+}
+.tk-k { color: var(--foreground); font-weight: 600; }
+.tk-s { color: var(--code-str); }
+.tk-c { color: var(--text-3); font-style: italic; }
+.tk-n { color: var(--text-2); }
+
+/* Read-only code view (paste detail). */
+.code-view {
+  display: flex;
+  overflow: auto;
+  max-height: 70vh;
+}
+.code-view .ed-gutter {
+  overflow: visible;
+  flex: none;
+}
+.code-pre {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: var(--font-jetbrains);
+  font-size: 12.5px;
+  line-height: 21px;
+  tab-size: 2;
+  white-space: pre;
+  color: var(--foreground);
+  flex: 1;
+  min-width: 0;
+}
+
+@keyframes rowflash {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: color-mix(in oklab, var(--primary) 8%, transparent); }
+}
+.row-flash {
+  animation: rowflash 1.4s var(--ease, ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-flash { animation: none; }
+}

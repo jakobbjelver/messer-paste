@@ -31,3 +31,6 @@ server.token
 .idea/
 .vscode/
 .hermes/
+
+# Generated per build (scripts/gen-version.mjs)
+web/app/src/lib/version.ts

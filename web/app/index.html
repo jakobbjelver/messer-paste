@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Messer Paste</title>
+    <meta name="description" content="A minimal pastebin for text, images and files." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="rgb(250 250 250)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="rgb(10 10 10)" />
+    <meta property="og:title" content="Messer Paste" />
+    <meta property="og:description" content="A minimal pastebin for text, images and files." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://paste.example.com/og.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      // Before first paint: the family theme key, falling back to the OS.
+      (function () {
+        try {
+          var stored = localStorage.getItem("messer-theme");
+          var theme = stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          if (theme === "dark") document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

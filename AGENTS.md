@@ -1,49 +1,60 @@
 # AGENTS.md — Messer Paste
 
-{{One sentence: what this is and where it runs.}}
+A single-user pastebin at `paste.example.com`, behind an authenticating proxy, served by one Go binary.
 
 ## What this is
 
-{{The product in two or three sentences. Name the user, the job it does and the one thing that is
-unusual about it.}}
+Text, images and files, pasted or dropped, with expiry, burn-after-reading and live updates across
+every open browser. One owner, no accounts and no sharing controls: the Access wall is the
+only gate. The unusual part is the storage split — metadata in SQLite on the SSD, every byte of
+content in a directory tree on the Media volume — and the UI updates over one SSE stream, never by
+polling.
 
 ## Read first
 
 - `PROJECT.yaml` — the machine-readable facts (tier, stack, deploy, ports, exceptions).
 - `README.md` — how to run it.
 - Skill `messer-paste` — live state, diagnosis ladders and traps.
-- {{docs/PLAN.md or .hermes/plans/<file> — the spec for a multi-milestone build.}}
+- `.hermes/plans/2026-11-16_115356-messer-paste-build.md` — the build plan this came from.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `cmd/messer-paste/` | entry point |
-| `internal/` | domain, httpapi, store, config |
-| `web/` | React app, built to `web/dist` and embedded |
-| `deploy/` | container and host deploy assets |
-| `actions/actions.json` | Portal actions, including the dev server |
+| `cmd/messer-paste/` | entry point; `doctor` subcommand |
+| `internal/paste/` | domain, slugs, content tree, service rules, expiry, events |
+| `internal/store/` | SQLite rows (pastes, files, burn tombstones) |
+| `internal/httpapi/` | the only place a request is parsed or a status chosen; SSE hub |
+| `web/web.go` | embeds `web/app/dist`, SPA fallback, 503 when unbuilt |
+| `web/app/` | React app (TanStack Router + Query, Messer UI) |
+| `deploy/` | container assets (the Dockerfile is at the root, from the template) |
+| `actions/actions.json` | Portal dev-server action |
 
 ## Commands
 
 ```bash
-make dev        # start the dev server(s)
-make test       # unit + integration
-make lint       # read-only checks
-make typecheck  # tsc / go vet
-make build      # deployable artifact
-make check      # the full local gate
-make doctor     # diagnose the live/local install (--json)
+make dev        # Go :8015 + Vite :3015, one trap for both
+make test       # go test (builds the web first; the binary embeds dist)
+make lint       # fmt-check + vet
+make typecheck  # tsc -b --noEmit
+make build      # web + Go binary in bin/
+make check      # fmt-check + vet + race + typecheck
+make doctor     # db, content root, row/dir reconciliation, free space
 ```
 
-Every command is non-interactive and exits non-zero on failure. A command that only works on one
-machine is a bug.
+Every command is non-interactive and exits non-zero on failure.
 
 ## Invariants
 
-- {{A testable rule. Example: The container never mounts the media library.}}
-- {{A testable rule. Example: The queue survives restarts and lives on a bind-backed volume.}}
-- {{A testable rule. Example: A missing frontend answers 503 and never takes the API down.}}
+- Content lives under `PASTE_ROOT/<SLUG>/` on the Media bind mount; SQLite lives on the SSD
+  (`${SERVER_CONFIGS_DIR}/apps/paste/data`). A reset of one must be reconcilable from the other.
+- The container publishes no host port. Caddy reaches `messer-paste:8080` on `server_network`.
+- Expiry, burn and purge delete permanently. There is no trash and no restore.
+- `/api/events` is the only EventSource in the app; the `/ui` sink never opens one (the conformance
+  harness waits for `networkidle`).
+- No auth in the app. an authenticating proxy is the gate; a 200 from an unauthenticated public request
+  is a security bug.
+- Uploads are streamed to a staging dir, committed by rename/copy, and every name passes `SafeName`.
 
 ## Working rules
 
@@ -56,4 +67,4 @@ machine is a bug.
 ## Where the depth is
 
 Skill `messer-paste` — operating the live thing, diagnosis, incidents and references.
-Plan: {{path}}.
+Plan: `.hermes/plans/2026-11-16_115356-messer-paste-build.md`.

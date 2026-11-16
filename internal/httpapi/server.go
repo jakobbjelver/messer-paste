@@ -1,0 +1,159 @@
+// Package httpapi is the only place a request is parsed or a status code chosen.
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/jakobbjelver/messer-paste/internal/config"
+	"github.com/jakobbjelver/messer-paste/internal/paste"
+	"github.com/jakobbjelver/messer-paste/internal/store"
+	"github.com/jakobbjelver/messer-paste/web"
+)
+
+var errBadRequest = errors.New("bad_request")
+
+type Server struct {
+	cfg     config.Config
+	svc     *paste.Service
+	store   *store.Store
+	tree    *paste.Storage
+	hub     *Hub
+	log     *slog.Logger
+	Version string
+	Commit  string
+	Built   string
+}
+
+func New(cfg config.Config, svc *paste.Service, st *store.Store, tree *paste.Storage, hub *Hub, log *slog.Logger) *Server {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Server{cfg: cfg, svc: svc, store: st, tree: tree, hub: hub, log: log, Version: "dev", Commit: "dev", Built: "unknown"}
+}
+
+func (s *Server) Handler() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
+	r.Use(s.requestLog)
+
+	r.Get("/healthz", s.health)
+	r.Get("/readyz", s.ready)
+
+	r.Route("/api", func(api chi.Router) {
+		api.Get("/pastes", s.listPastes)
+		api.Post("/pastes", s.createPaste)
+		api.Delete("/pastes", s.purgePastes)
+		api.Get("/events", s.events)
+
+		api.Route("/pastes/{slug}", func(item chi.Router) {
+			item.Get("/", s.getPaste)
+			item.Put("/", s.updatePaste)
+			item.Delete("/", s.deletePaste)
+			item.Get("/raw", s.rawPaste)
+			item.Get("/files/{id}", s.filePaste)
+			item.Post("/reveal", s.revealPaste)
+		})
+	})
+
+	webHandler := web.Handler()
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			writeError(w, http.StatusNotFound, "not_found")
+			return
+		}
+		webHandler.ServeHTTP(w, r)
+	})
+	return r
+}
+
+func (s *Server) requestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(rec, r)
+		if strings.HasPrefix(r.URL.Path, "/api/events") {
+			return // a stream never "finishes"; logging it as 200/0ms is noise
+		}
+		s.log.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.Status(),
+			"bytes", rec.BytesWritten(),
+			"ms", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": s.Version,
+		"commit":  s.Commit,
+		"built":   s.Built,
+	})
+}
+
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.Ping(r.Context()); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "db_unavailable")
+		return
+	}
+	probe, err := os.CreateTemp(s.tree.Root(), ".ready-*")
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "content_unavailable")
+		return
+	}
+	name := probe.Name()
+	probe.Close()
+	_ = os.Remove(name)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeError(w http.ResponseWriter, status int, code string) {
+	writeJSON(w, status, map[string]string{"error": code})
+}
+
+func statusFor(err error) (int, string) {
+	switch {
+	case errors.Is(err, paste.ErrNotFound):
+		return http.StatusNotFound, "not_found"
+	case errors.Is(err, paste.ErrGone):
+		return http.StatusGone, "gone"
+	case errors.Is(err, paste.ErrBurnNeeded):
+		return http.StatusConflict, "burn_required"
+	case errors.Is(err, paste.ErrTooLarge):
+		return http.StatusRequestEntityTooLarge, "too_large"
+	case errors.Is(err, paste.ErrTextTooBig):
+		return http.StatusRequestEntityTooLarge, "text_too_large"
+	case errors.Is(err, paste.ErrUnavailable):
+		return http.StatusServiceUnavailable, "content_unavailable"
+	case errors.Is(err, errBadRequest):
+		return http.StatusBadRequest, "bad_request"
+	default:
+		return http.StatusInternalServerError, "internal"
+	}
+}
+
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
+	status, code := statusFor(err)
+	if status >= 500 {
+		s.log.Error("request failed", "path", r.URL.Path, "err", err)
+	}
+	writeError(w, status, code)
+}

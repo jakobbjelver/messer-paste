@@ -7,7 +7,7 @@ standard: "1.1"
 name: "messer-paste"
 display: "Messer Paste"
 family: "messer"                 # messer | personal | upstream
-status: "wip"                    # active | wip | paused | archived
+status: "active"                    # active | wip | paused | archived
 tier: "service"                  # service | static | edge | native | tool | design
 kind: "repo"                     # repo | embedded
 # parent: "site"                 # required when kind is embedded
@@ -26,7 +26,7 @@ deploy:
   kind: "docker"                 # docker | cloudflare-worker | pm2 | store | none
   image: "ghcr.io/jakobbjelver/messer-paste"
   stack: "apps"                  # stack in ~/Server
-  service: "paste"         # service key in services.yaml
+  service: "paste"               # service key in services.yaml
   domain: "paste.example.com"
   dev_domain: "paste-dev.example.com"
 

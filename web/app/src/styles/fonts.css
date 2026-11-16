@@ -1,0 +1,21 @@
+/* Canon families, declared under their canon names — not Fontsource's "… Variable".
+   A FontFaceSet without a face named exactly "Golos Text" falls back to system sans while every
+   measurement still passes; app-conformance asserts the loaded face, not the computed stack. */
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/golos-text-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
+:root {
+  --font-golos: "Golos Text";
+  --font-jetbrains: "JetBrains Mono";
+}
