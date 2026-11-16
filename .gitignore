@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+
+# Build output
+dist/
+site/dist/
+build/
+bin/
+.next/
+.astro/
+.dev/
+
+# Local state and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+server.token
+*.db
+*.db-wal
+*.db-shm
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.hermes/

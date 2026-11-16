@@ -1,0 +1,45 @@
+# PROJECT.yaml — "Messer Paste"
+# The machine-readable facts. The audit cross-checks this file against the repo, the skill and
+# ~/Server/services.yaml. A false manifest is worse than no manifest: keep it true.
+
+schema: 1
+standard: "1.1"
+name: "messer-paste"
+display: "Messer Paste"
+family: "messer"                 # messer | personal | upstream
+status: "wip"                    # active | wip | paused | archived
+tier: "service"                  # service | static | edge | native | tool | design
+kind: "repo"                     # repo | embedded
+# parent: "site"                 # required when kind is embedded
+skill: "messer-paste"                # one project skill, frontmatter repo: ~/Repos/messer-paste
+
+stack:
+  backend: "go"                  # go | node | python | none
+  frontend: "react-vite"         # react-vite | next | astro | none
+  router: "tanstack-router"      # tanstack-router | react-router | next-app | astro | none
+  data: "sqlite"                 # sqlite | postgres | none
+  ui: "messer-ui"                # messer-ui | none
+  brand: "paste"           # messer-ui brand id
+  port: 1                        # 1 = React + shadcn; 2 = static .m-* atoms; 3 = native
+
+deploy:
+  kind: "docker"                 # docker | cloudflare-worker | pm2 | store | none
+  image: "ghcr.io/jakobbjelver/messer-paste"
+  stack: "apps"                  # stack in ~/Server
+  service: "paste"         # service key in services.yaml
+  domain: "paste.example.com"
+  dev_domain: "paste-dev.example.com"
+
+dev:
+  command: "make dev"
+  ports: ["3015", "8015"]
+  pm2: "messer-paste-dev"
+  action: "actions/actions.json"
+
+health: "/healthz"
+
+# Every exception is dated and has a reason. An expired exception is an error.
+exceptions: []
+#  - id: nextjs
+#    reason: Existing App Router app; a rewrite would cost more than it returns.
+#    expires: 2027-06-30
