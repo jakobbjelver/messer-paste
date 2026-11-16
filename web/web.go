@@ -38,8 +38,16 @@ func handlerFor(fsys fs.FS) http.Handler {
 		}
 		if f, err := fsys.Open(clean); err == nil {
 			_ = f.Close()
-			if strings.HasPrefix(clean, "assets/") {
+			switch {
+			case strings.HasPrefix(clean, "assets/"):
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			case clean == "sw.js" || clean == "manifest.webmanifest":
+				// Both must be re-read on every visit: a cached worker is a stale app, and a cached
+				// manifest hides an icon or a start_url fix for a day.
+				w.Header().Set("Cache-Control", "no-cache")
+				if clean == "manifest.webmanifest" {
+					w.Header().Set("Content-Type", "application/manifest+json")
+				}
 			}
 			files.ServeHTTP(w, r)
 			return

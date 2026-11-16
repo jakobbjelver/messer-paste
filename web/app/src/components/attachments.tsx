@@ -61,11 +61,11 @@ export function Attachments({
             )}
             <figcaption className="flex h-8 items-center gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-2">
               {isImage ? (
-                <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-[var(--text-3)]">
+                <span className="min-w-0 flex-1 truncate text-[10.5px] tabular-nums text-[var(--text-3)]">
                   {file.name}
                 </span>
               ) : null}
-              <span className="ml-auto shrink-0 font-mono text-[10.5px] text-[var(--text-3)]">
+              <span className="ml-auto shrink-0 text-[10.5px] tabular-nums text-[var(--text-3)]">
                 {bytes(file.size)}
               </span>
               <RemoveButton name={file.name} onClick={() => onRemove(file.key)} />

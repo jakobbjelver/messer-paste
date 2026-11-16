@@ -37,7 +37,7 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-mono text-base font-medium">{title}</AlertDialogTitle>
+          <AlertDialogTitle className="text-base font-semibold">{title}</AlertDialogTitle>
           <AlertDialogDescription className="text-sm leading-relaxed text-[var(--text-2)]">
             {body}
           </AlertDialogDescription>

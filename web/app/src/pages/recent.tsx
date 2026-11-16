@@ -18,6 +18,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { InstallHint } from "@/components/install-hint";
 import { useLive } from "@/hooks/use-live-events";
 import { ago, bytes, expiringSoon, remaining } from "@/lib/format";
 
@@ -200,6 +201,8 @@ export function RecentPage() {
         }
       />
 
+      <InstallHint />
+
       {list.isLoading ? (
         <SkeletonTable rows={6} />
       ) : list.isError ? (
@@ -247,26 +250,26 @@ export function RecentPage() {
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
                 <Kind kind={row.kind} />
                 <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
-                <span className="font-mono text-[11px] text-[var(--text-3)]">
+                <span className="text-[11px] tabular-nums text-[var(--text-3)]">
                   {bytes(row.textBytes + row.fileBytes)}
                 </span>
                 <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
                 <Expiry row={row} />
                 <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
-                <span className="font-mono text-[11px] text-[var(--text-3)]">
+                <span className="text-[11px] tabular-nums text-[var(--text-3)]">
                   {ago(row.updatedAt)}
                 </span>
               </span>
               <span className="hidden md:block">
                 <Kind kind={row.kind} />
               </span>
-              <span className="hidden font-mono text-[11px] text-[var(--text-3)] md:block">
+              <span className="hidden text-[11px] tabular-nums text-[var(--text-3)] md:block">
                 {ago(row.updatedAt)}
               </span>
               <span className="hidden md:block">
                 <Expiry row={row} />
               </span>
-              <span className="hidden text-right font-mono text-[11px] text-[var(--text-3)] md:block">
+              <span className="hidden text-right text-[11px] tabular-nums text-[var(--text-3)] md:block">
                 {bytes(row.textBytes + row.fileBytes)}
               </span>
             </Link>
@@ -279,7 +282,7 @@ export function RecentPage() {
           ) : null}
           <div ref={sentinel} className="grid h-10 place-items-center">
             {!list.hasNextPage && rows.length > 0 ? (
-              <span className="font-mono text-[11px] text-[var(--text-3)]">
+              <span className="text-[11px] tabular-nums text-[var(--text-3)]">
                 {search ? `${total} ${total === 1 ? "match" : "matches"}` : `End of archive · ${total}`}
               </span>
             ) : null}

@@ -278,7 +278,7 @@ export function ComposerScreen({
         }}
         data-dropzone="true"
         data-dragging={dragging ? "true" : undefined}
-        className="relative grid grid-rows-[minmax(300px,52vh)_auto] border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_264px] lg:overflow-hidden"
+        className="relative grid grid-rows-[minmax(300px,52dvh)_auto] border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_264px] lg:overflow-hidden"
       >
         <div
           className="flex min-h-0 min-w-0 cursor-text flex-col border-b border-[var(--border)] lg:border-b-0 lg:border-r"
@@ -289,7 +289,7 @@ export function ComposerScreen({
           }}
         >
           <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
-            <span className="flex items-center gap-2 font-mono text-xs text-[var(--text-2)]">
+            <span className="flex items-center gap-2 text-xs tabular-nums text-[var(--text-2)]">
               <span>{languageLabel(detected)}</span>
               {draft.language === "auto" ? (
                 <>
@@ -333,7 +333,7 @@ export function ComposerScreen({
             autoFocus
           />
 
-          <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-3 font-mono text-[11px] text-[var(--text-3)]">
+          <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-3 text-[11px] tabular-nums text-[var(--text-3)]">
             <span aria-label={`${counts.lines} lines, ${bytes(counts.textBytes)}`}>
               {counts.lines} {counts.lines === 1 ? "line" : "lines"} · {bytes(counts.textBytes)}
             </span>
@@ -366,7 +366,7 @@ export function ComposerScreen({
 
         {dragging ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center border border-dashed border-[var(--border-strong)] bg-[color-mix(in_oklab,var(--surface)_82%,transparent)]">
-            <span className="flex items-center gap-2 font-mono text-sm text-[var(--foreground)]">
+            <span className="flex items-center gap-2 text-sm text-[var(--foreground)]">
               <UploadSimple size={18} aria-hidden="true" />
               Drop to attach
             </span>

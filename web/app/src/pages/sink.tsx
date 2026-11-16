@@ -16,7 +16,7 @@ export function SinkPage() {
       <header className="grid gap-1">
         <span className="m-label">Messer UI</span>
         <h1>Paste specimens</h1>
-        <p className="m-0 font-mono text-[11px] text-[var(--text-3)]">
+        <p className="m-0 text-[11px] tabular-nums text-[var(--text-3)]">
           Every control, one state each. The harness measures this page, not the app screens.
         </p>
       </header>
@@ -121,8 +121,8 @@ export function SinkPage() {
                 B91E04AA
               </span>
             </span>
-            <span className="text-right font-mono text-[11px] text-[var(--text-2)]">1.1 KB</span>
-            <span className="text-right font-mono text-[11px] text-[var(--text-2)]">21h</span>
+            <span className="text-right text-[11px] tabular-nums text-[var(--text-2)]">1.1 KB</span>
+            <span className="text-right text-[11px] tabular-nums text-[var(--text-2)]">21h</span>
           </div>
           <div className="grid h-[52px] grid-cols-[minmax(0,1fr)_96px_84px] items-center gap-3 px-3 hover:bg-[var(--surface-2)]">
             <span className="grid gap-0.5">
@@ -131,8 +131,8 @@ export function SinkPage() {
                 6YTZV5LW
               </span>
             </span>
-            <span className="text-right font-mono text-[11px] text-[var(--text-2)]">1.4 MB</span>
-            <span className="text-right font-mono text-[11px] text-[var(--text-2)]">never</span>
+            <span className="text-right text-[11px] tabular-nums text-[var(--text-2)]">1.4 MB</span>
+            <span className="text-right text-[11px] tabular-nums text-[var(--text-2)]">never</span>
           </div>
         </div>
       </section>

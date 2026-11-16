@@ -111,7 +111,7 @@ export function PasteOptions({
         {draft.files.length > 0 ? (
           <Section label="Files">
             <div className="flex h-8 items-center justify-between gap-2 border border-[var(--border-strong)] bg-[var(--surface)] px-2.5">
-              <span className="truncate font-mono text-xs text-[var(--text-2)]">
+              <span className="truncate text-xs tabular-nums text-[var(--text-2)]">
                 {draft.files.length} {draft.files.length === 1 ? "file" : "files"} ·{" "}
                 {fileBytes > 1024 * 1024
                   ? `${(fileBytes / 1024 / 1024).toFixed(1)} MB`
@@ -144,7 +144,7 @@ export function PasteOptions({
               ))}
             </SelectContent>
           </Select>
-          <span className="font-mono text-[10.5px] text-[var(--text-3)]">
+          <span className="text-[10.5px] tabular-nums text-[var(--text-3)]">
             {draft.language === "auto"
               ? `detected ${languageLabel(detected)}`
               : languageLabel(draft.language)}
@@ -170,7 +170,7 @@ export function PasteOptions({
                       : { visibility: value },
                   )
                 }
-                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] font-mono text-[11px] uppercase tracking-[0.1em] last:border-r-0 ${
+                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] text-[11px] font-medium uppercase tracking-[0.06em] last:border-r-0 ${
                   draft.visibility === value
                     ? "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] text-[var(--foreground)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[var(--primary)] after:content-['']"
                     : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
@@ -208,7 +208,7 @@ export function PasteOptions({
                     onChange={(event) =>
                       set({ password: event.target.value, clearPassword: false })
                     }
-                    className="h-full min-w-0 flex-1 bg-transparent px-1 font-mono text-xs text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
+                    className="h-full min-w-0 flex-1 bg-transparent px-1 text-sm text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
                   />
                   <button
                     type="button"
@@ -288,7 +288,7 @@ export function PasteOptions({
                 aria-label={option.label ?? "Never expires"}
                 disabled={draft.visibility === "public" && option.value === 0}
                 onClick={() => set({ expiresIn: option.value })}
-                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] font-mono text-[11px] uppercase tracking-[0.1em] last:border-r-0 disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`relative grid h-8 cursor-pointer place-items-center border-r border-[var(--border-strong)] text-[11px] font-medium uppercase tracking-[0.06em] last:border-r-0 disabled:cursor-not-allowed disabled:opacity-40 ${
                   draft.expiresIn === option.value
                     ? "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] text-[var(--foreground)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[var(--primary)] after:content-['']"
                     : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
@@ -298,7 +298,7 @@ export function PasteOptions({
               </button>
             ))}
           </div>
-          <span className="font-mono text-[10.5px] text-[var(--text-3)]">
+          <span className="text-[10.5px] tabular-nums text-[var(--text-3)]">
             {expiresAt ? `until ${absolute(expiresAt)}` : "kept until deleted"}
           </span>
         </Section>
@@ -320,7 +320,7 @@ export function PasteOptions({
         </Section>
       </div>
 
-      <div className="sticky bottom-0 z-10 border-t border-[var(--border)] bg-[var(--surface)] p-4 lg:static lg:bg-transparent">
+      <div className="sticky bottom-0 z-10 border-t border-[var(--border)] bg-[var(--surface)] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] lg:static lg:bg-transparent lg:pb-4">
         <button
           type="button"
           id="commit"

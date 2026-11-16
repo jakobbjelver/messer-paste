@@ -337,12 +337,12 @@ export function PastePage() {
 
       <div className="border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex h-10 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
-          <span className="font-mono text-xs text-[var(--text-2)]">
+          <span className="text-xs tabular-nums text-[var(--text-2)]">
             {isText
               ? "body.txt"
               : `${files.length} ${files.length === 1 ? "file" : "files"}`}
           </span>
-          <span className="flex items-center gap-3 font-mono text-[11px] text-[var(--text-3)]">
+          <span className="flex items-center gap-3 text-[11px] tabular-nums text-[var(--text-3)]">
             {isText ? (
               <a
                 href={api.rawUrl(paste.slug)}
@@ -386,7 +386,7 @@ export function PastePage() {
               aria-label={`Open ${file.name}`}
             >
               <span className="truncate">{file.name}</span>
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-[var(--text-3)]">
+              <span className="ml-auto shrink-0 text-[11px] tabular-nums text-[var(--text-3)]">
                 {bytes(file.size)}
               </span>
             </a>
@@ -402,7 +402,7 @@ export function PastePage() {
         ))}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 font-mono text-[11px] text-[var(--text-3)]">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] tabular-nums text-[var(--text-3)]">
         <span>
           Created {absolute(paste.createdAt)} · Updated {absolute(paste.updatedAt)}
         </span>

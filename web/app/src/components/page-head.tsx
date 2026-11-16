@@ -22,7 +22,7 @@ export function PageHead({
         <span className="m-label">{eyebrow}</span>
         <h1 className="m-0">{title}</h1>
         {meta ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-[var(--text-3)]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] tabular-nums text-[var(--text-3)]">
             {meta}
           </div>
         ) : null}

@@ -54,6 +54,23 @@ from anywhere else set `PASTE_URL` and a bearer token (or a service token for an
 Expiry is `expires_in` seconds (`0` = never). Burn pastes are capped at 10 MB because the reveal
 returns the payload inline.
 
+## On a phone
+
+The app is installable: on iOS, Share → **Add to Home Screen** (iOS 26 opens every added site as a
+web app by default). It then runs full screen with its own session, and the app shell is cached, so a
+dead network still opens the composer — the archive and the API are never cached, and a new build
+offers a reload instead of swapping itself in.
+
+Because iOS has no `share_target`, "send this to Paste" from another app is an iOS **Shortcut**:
+
+1. Shortcuts → New Shortcut → **Receive** `Text` and `URLs` from Share Sheet.
+2. Add **Get Contents of URL**: `POST`, the paste host + `/api/v1/pastes`, request body **Form**,
+   fields `text` = Shortcut Input, `expires_in` = `86400`.
+3. Header `Authorization: Bearer <token>` (the same 0600 token as `mpaste`).
+4. Enable **Show in Share Sheet**; give it a name like "Paste it".
+
+For a file, use `Get File` and a `file` form field instead of `text`.
+
 ## Deploy
 
 CI builds and publishes `ghcr.io/jakobbjelver/messer-paste`; the deploy runner deploys the `apps` stack. The

@@ -173,3 +173,17 @@
     line-height: 25px;
   }
 }
+
+
+/* Home-screen app. The viewport is cover, so the page starts under the status bar and ends under the
+   home indicator; the standalone display mode is where that padding belongs. */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  overscroll-behavior-y: none;
+}
