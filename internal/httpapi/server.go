@@ -178,11 +178,21 @@ var messages = map[string]string{
 }
 
 func writeError(w http.ResponseWriter, status int, code string) {
-	message, ok := messages[code]
-	if !ok {
-		message = messages["E_INTERNAL"]
+	writeErrorDetail(w, status, code, "", "")
+}
+
+// writeErrorDetail carries the form field a validation failure belongs to, and its sentence: the
+// generic message for the code cannot say "a public paste must expire" without guessing.
+func writeErrorDetail(w http.ResponseWriter, status int, code, field, detail string) {
+	message := detail
+	if message == "" {
+		known, ok := messages[code]
+		if !ok {
+			known = messages["E_INTERNAL"]
+		}
+		message = known
 	}
-	writeJSON(w, status, errorDTO{Error: errorBody{Code: code, Message: message}})
+	writeJSON(w, status, errorDTO{Error: errorBody{Code: code, Message: message, Field: field}})
 }
 
 func statusFor(err error) (int, string) {
@@ -212,6 +222,11 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	status, code := statusFor(err)
 	if status >= 500 {
 		s.log.Error("request failed", "path", r.URL.Path, "err", err)
+	}
+	var named paste.FieldError
+	if errors.As(err, &named) {
+		writeErrorDetail(w, status, code, named.Field, named.Message)
+		return
 	}
 	writeError(w, status, code)
 }

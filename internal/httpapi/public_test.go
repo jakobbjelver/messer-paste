@@ -341,3 +341,62 @@ func TestVisibilityRoundTrip(t *testing.T) {
 		t.Fatalf("private again on the public host = %d", res.StatusCode)
 	}
 }
+
+// A validation failure names the control it belongs to, so the client can highlight it.
+func TestInvalidNamesTheField(t *testing.T) {
+	ts := newPublicServer(t)
+	body, contentType := form(t, map[string]string{"text": "x", "visibility": "public"}, "", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+api+"/pastes", body)
+	req.Header.Set("Content-Type", contentType)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d", res.StatusCode)
+	}
+	var envelope struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Field   string `json:"field"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Error.Field != "expiry" {
+		t.Fatalf("field = %q", envelope.Error.Field)
+	}
+	if !strings.Contains(envelope.Error.Message, "expire") {
+		t.Fatalf("message = %q", envelope.Error.Message)
+	}
+}
+
+// A viewable file opens; the download route saves it; anything else is always a download.
+func TestFileDisposition(t *testing.T) {
+	ts := newPublicServer(t)
+	pdf := []byte("%PDF-1.4\n%%EOF")
+	created := create(t, ts, map[string]string{"title": "doc", "expires_in": "86400"}, "doc.pdf", pdf)
+	if len(created.Files) != 1 {
+		t.Fatalf("files = %d", len(created.Files))
+	}
+	id := created.Files[0].ID
+
+	inlineRes := call(t, ts, http.MethodGet, "", api+"/pastes/"+created.Slug+"/files/"+id, nil, "")
+	if got := inlineRes.Header.Get("Content-Disposition"); got != "inline" {
+		t.Fatalf("view disposition = %q", got)
+	}
+	saved := call(t, ts, http.MethodGet, "", api+"/pastes/"+created.Slug+"/files/"+id+"?download=1", nil, "")
+	if got := saved.Header.Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+		t.Fatalf("download disposition = %q", got)
+	}
+
+	bin := create(t, ts, map[string]string{"title": "bin", "expires_in": "86400"}, "tool.bin", []byte{0x4d, 0x5a, 0x00, 0x01})
+	binID := bin.Files[0].ID
+	binRes := call(t, ts, http.MethodGet, "", api+"/pastes/"+bin.Slug+"/files/"+binID, nil, "")
+	if got := binRes.Header.Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+		t.Fatalf("binary view disposition = %q", got)
+	}
+}

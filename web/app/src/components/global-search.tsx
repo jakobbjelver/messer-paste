@@ -5,20 +5,36 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import { modKey } from "@/lib/platform";
 
 /**
- * The one search field, in the top bar. Typing writes ?q= on /recent, so a search is a URL a person
- * can keep. ⌘K/Ctrl+K focuses it from any page, which is also what stops the browser's own search.
+ * The one search field. In the top bar it is a fixed-width input with the shortcut badge; on a phone
+ * the same field renders full width under the header, with no badge and autofocus, because there is
+ * no keyboard to advertise and no room for it beside the brand.
+ *
+ * Typing writes ?q= on /recent, so a search is a URL a person can keep. ⌘K/Ctrl+K focuses the bar
+ * from any page, which is also what stops the browser's own find-this-page.
  */
-export function GlobalSearch() {
+export function GlobalSearch({
+  variant = "bar",
+  onDone,
+}: {
+  variant?: "bar" | "inline";
+  onDone?: () => void;
+}) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = useRouterState({ select: (s) => (s.location.search as { q?: string }).q ?? "" });
   const [value, setValue] = useState(current);
   const input = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
+  const inline = variant === "inline";
 
   useEffect(() => setValue(current), [current]);
 
   useEffect(() => {
+    if (inline) {
+      input.current?.focus();
+      input.current?.select();
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
@@ -27,7 +43,7 @@ export function GlobalSearch() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [inline]);
 
   useEffect(() => {
     if (pathname === "/recent") return;
@@ -40,7 +56,11 @@ export function GlobalSearch() {
   };
 
   return (
-    <label className="relative hidden h-8 items-center sm:flex">
+    <label
+      className={`relative flex h-8 items-center ${
+        inline ? "w-full" : "hidden sm:flex"
+      }`}
+    >
       <MagnifyingGlass
         size={14}
         aria-hidden="true"
@@ -57,15 +77,17 @@ export function GlobalSearch() {
           if (event.key === "Escape") {
             event.currentTarget.blur();
             if (value) apply("");
+            onDone?.();
           }
+          if (event.key === "Enter") onDone?.();
         }}
         placeholder="Search pastes"
         aria-label="Search pastes"
-        className={`h-8 w-[220px] border bg-[var(--surface)] pl-7 pr-14 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] [&::-webkit-search-cancel-button]:hidden ${
-          focused ? "border-[var(--border-strong)]" : "border-[var(--border)]"
-        }`}
+        className={`h-8 border bg-[var(--surface)] pl-7 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] [&::-webkit-search-cancel-button]:hidden ${
+          inline ? "w-full pr-2" : "w-[220px] pr-14"
+        } ${focused ? "border-[var(--border-strong)]" : "border-[var(--border)]"}`}
       />
-      {value ? null : (
+      {value || inline ? null : (
         <kbd className="m-kbd pointer-events-none absolute right-2" aria-hidden="true">
           {modKey()}K
         </kbd>

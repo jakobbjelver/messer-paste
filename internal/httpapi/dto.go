@@ -53,6 +53,8 @@ type listDTO struct {
 type errorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Field names the form control an E_INVALID belongs to, when there is one.
+	Field string `json:"field,omitempty"`
 }
 
 type errorDTO struct {

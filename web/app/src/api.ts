@@ -73,10 +73,13 @@ type WirePaste = {
 export class ApiError extends Error {
   status: number;
   code: string;
-  constructor(status: number, code: string, message?: string) {
+  /** The form field the server blamed, when it can name one. */
+  field?: string;
+  constructor(status: number, code: string, message?: string, field?: string) {
     super(message || code);
     this.status = status;
     this.code = code;
+    this.field = field;
   }
 }
 
@@ -120,14 +123,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let code = "E_INTERNAL";
     let message = res.statusText;
+    let field: string | undefined;
     try {
-      const body = (await res.json()) as { error?: { code?: string; message?: string } };
+      const body = (await res.json()) as {
+        error?: { code?: string; message?: string; field?: string };
+      };
       if (body?.error?.code) code = body.error.code;
       if (body?.error?.message) message = body.error.message;
+      if (body?.error?.field) field = body.error.field;
     } catch {
       /* not JSON */
     }
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, field);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

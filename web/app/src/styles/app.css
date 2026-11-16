@@ -143,8 +143,17 @@
   color: var(--text-2) !important;
 }
 
-/* Keycaps inside a primary button: the recipe's 10.5px/5px is too wide next to a centred label. */
+/* Keycaps inside a primary button: the recipe's 10.5px/5px is too wide next to a label with an icon. */
 .m-kbd--tight {
   padding-inline: 4px;
   font-size: 10px;
+}
+
+/* The recipe paints every keycap --text-3 on --surface-2. Inside the CTA they must follow the
+   button's own colour, including its disabled colour, so the whole control changes together. */
+.m-kbd--inherit {
+  border-color: color-mix(in oklab, currentColor 32%, transparent);
+  border-bottom-width: 2px;
+  background: transparent;
+  color: currentColor;
 }

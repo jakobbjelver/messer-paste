@@ -1,6 +1,7 @@
 # AGENTS.md — Messer Paste
 
-A single-user pastebin at `paste.example.com`, behind an authenticating proxy, served by one Go binary.
+A single-user pastebin at `paste.example.com`, served by one Go binary, meant to run behind an
+authenticating proxy.
 
 ## What this is
 
@@ -60,7 +61,7 @@ Every command is non-interactive and exits non-zero on failure.
   body is not in the index is a bug, and `doctor` reports index drift.
 - `/api/v1/events` is the only EventSource in the app; the `/ui` sink never opens one (the conformance
   harness waits for `networkidle`).
-- No auth in the app. an authenticating proxy is the gate; a 200 from an unauthenticated public request
+- No auth in the app. The proxy in front is the gate; a 200 from an unauthenticated public request
   is a security bug. Machine clients use a bearer token from a `0600` file or a CF service token —
   never a checked-in `.env`.
 - An agent creates pastes through `mpaste put` or the API, never by writing into

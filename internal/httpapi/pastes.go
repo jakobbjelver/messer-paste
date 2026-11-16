@@ -175,8 +175,11 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, slug string) 
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=300")
 
-	inline := inlineImage(file.Mime) && r.URL.Query().Get("download") != "1"
-	if inline {
+	// A file the browser can render is opened, not saved; anything else is only ever a download.
+	// HTML never counts as viewable: a paste is user content and must not render as a page here.
+	viewable := viewableMime(file.Mime)
+	saving := r.URL.Query().Get("download") == "1"
+	if viewable && !saving {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": file.Name}))
@@ -294,6 +297,21 @@ func sniff(path string) string {
 	buffer := make([]byte, 512)
 	n, _ := handle.Read(buffer)
 	return http.DetectContentType(buffer[:n])
+}
+
+// viewableMime is the inline set. Deliberately narrow: images, PDFs and plain text. text/html and
+// SVG are user content that a browser would execute, so they download instead.
+func viewableMime(mimeType string) bool {
+	switch {
+	case strings.HasPrefix(mimeType, "image/") && mimeType != "image/svg+xml":
+		return true
+	case mimeType == "application/pdf":
+		return true
+	case strings.HasPrefix(mimeType, "text/") && mimeType != "text/html":
+		return true
+	default:
+		return false
+	}
 }
 
 func inlineImage(mimeType string) bool {

@@ -21,8 +21,10 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useLive } from "@/hooks/use-live-events";
 import { ago, bytes, expiringSoon, remaining } from "@/lib/format";
 
-const COLUMNS =
-  "grid-cols-[minmax(0,1fr)_96px_72px_84px] md:grid-cols-[minmax(0,1fr)_110px_76px_72px_96px]";
+// One row, two layouts: a card on a phone, a five-column table from md up. The tracks are declared
+// only where they are used — a five-cell row in a four-track grid is what made the phone list read
+// as "Paste Size" with zero-width columns.
+const COLUMNS = "md:grid-cols-[minmax(0,1fr)_110px_76px_72px_96px]";
 
 function kindIcon(kind: string) {
   switch (kind) {
@@ -95,14 +97,14 @@ function Snippet({ text }: { text: string }) {
 
 function SkeletonRow() {
   return (
-    <div className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-3 last:border-b-0`}>
+    <div className={`flex flex-col gap-1.5 border-b border-[var(--border)] px-4 py-3 last:border-b-0 md:grid ${COLUMNS} md:items-center md:gap-4`}>
       <span className="grid gap-1.5">
         <span className="h-3.5 w-[46%] bg-[var(--surface-2)]" />
         <span className="h-2.5 w-[64%] bg-[var(--surface-2)]" />
       </span>
-      <span className="h-3 w-12 bg-[var(--surface-2)]" />
+      <span className="hidden h-3 w-12 bg-[var(--surface-2)] md:block" />
       <span className="hidden h-3 w-10 bg-[var(--surface-2)] md:block" />
-      <span className="h-3 w-14 bg-[var(--surface-2)]" />
+      <span className="hidden h-3 w-14 bg-[var(--surface-2)] md:block" />
       <span className="hidden h-3 w-10 justify-self-end bg-[var(--surface-2)] md:block" />
     </div>
   );
@@ -214,7 +216,7 @@ export function RecentPage() {
       ) : (
         <div className="border border-[var(--border)] bg-[var(--surface)]">
           <div
-            className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-2`}
+            className={`hidden items-center gap-4 border-b border-[var(--border)] px-4 py-2 md:grid ${COLUMNS}`}
           >
             <span className="m-label">Paste</span>
             <span className="m-label">Kind</span>
@@ -227,7 +229,7 @@ export function RecentPage() {
               key={row.slug}
               to="/$slug"
               params={{ slug: row.slug }}
-              className={`grid ${COLUMNS} items-center gap-4 border-b border-[var(--border)] px-4 py-3 text-[var(--foreground)] no-underline last:border-b-0 hover:bg-[var(--surface-2)] ${
+              className={`flex flex-col gap-1.5 border-b border-[var(--border)] px-4 py-3 text-[var(--foreground)] no-underline last:border-b-0 hover:bg-[var(--surface-2)] md:grid md:items-center md:gap-4 ${COLUMNS} ${
                 flash === row.slug ? "bg-[var(--surface-2)]" : ""
               }`}
             >
@@ -242,11 +244,28 @@ export function RecentPage() {
                   </span>
                 ) : null}
               </span>
-              <Kind kind={row.kind} />
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
+                <Kind kind={row.kind} />
+                <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
+                <span className="font-mono text-[11px] text-[var(--text-3)]">
+                  {bytes(row.textBytes + row.fileBytes)}
+                </span>
+                <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
+                <Expiry row={row} />
+                <span aria-hidden="true" className="text-[var(--text-3)]">·</span>
+                <span className="font-mono text-[11px] text-[var(--text-3)]">
+                  {ago(row.updatedAt)}
+                </span>
+              </span>
+              <span className="hidden md:block">
+                <Kind kind={row.kind} />
+              </span>
               <span className="hidden font-mono text-[11px] text-[var(--text-3)] md:block">
                 {ago(row.updatedAt)}
               </span>
-              <Expiry row={row} />
+              <span className="hidden md:block">
+                <Expiry row={row} />
+              </span>
               <span className="hidden text-right font-mono text-[11px] text-[var(--text-3)] md:block">
                 {bytes(row.textBytes + row.fileBytes)}
               </span>

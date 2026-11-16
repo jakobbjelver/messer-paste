@@ -33,7 +33,8 @@ type Paste struct {
 	ExpiresAt *int64 `json:"expiresAt"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
-	// Visibility is "private" (the default, behind Access) or "public" (readable on the public host).
+	// Visibility is "private" (the default, only reachable through the proxy) or "public" (readable on
+	// the public host).
 	Visibility   string `json:"visibility"`
 	PasswordHash string `json:"-"`
 	MaxViews     *int64 `json:"maxViews,omitempty"`

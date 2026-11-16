@@ -1,7 +1,7 @@
 # Messer Paste
 
 A single-user pastebin: text, images and files, with expiry and burn-after-reading.
-Everything below needs a bearer token from a 0600 file, or a an authenticating proxy service token.
+Everything below needs a bearer token from a 0600 file, or a service token for the proxy in front.
 
 ## Write a paste from stdin
 

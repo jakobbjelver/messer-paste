@@ -373,17 +373,32 @@ export function PastePage() {
         ))}
 
         {others.map((file) => (
-          <a
+          <div
             key={file.id}
-            href={api.fileUrl(paste.slug, file.id, true)}
-            className="flex h-11 items-center justify-between gap-3 border-t border-[var(--border)] px-3 text-sm no-underline text-[var(--foreground)] hover:bg-[var(--surface-2)]"
+            className="flex h-11 items-center gap-3 border-t border-[var(--border)] pl-3 pr-1 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)]"
           >
-            <span className="truncate">{file.name}</span>
-            <span className="flex shrink-0 items-center gap-3 font-mono text-[11px] text-[var(--text-3)]">
-              {bytes(file.size)}
+            {/* The row opens the file; the icon saves it. Two different intentions, two targets. */}
+            <a
+              href={api.fileUrl(paste.slug, file.id)}
+              target="_blank"
+              rel="noopener"
+              className="flex min-w-0 flex-1 items-center gap-3 no-underline text-[var(--foreground)]"
+              aria-label={`Open ${file.name}`}
+            >
+              <span className="truncate">{file.name}</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-[var(--text-3)]">
+                {bytes(file.size)}
+              </span>
+            </a>
+            <a
+              href={api.fileUrl(paste.slug, file.id, true)}
+              download={file.name}
+              aria-label={`Download ${file.name}`}
+              className="grid size-9 shrink-0 place-items-center text-[var(--text-2)] no-underline hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            >
               <DownloadSimple size={16} aria-hidden="true" />
-            </span>
-          </a>
+            </a>
+          </div>
         ))}
       </div>
 

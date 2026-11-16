@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Paperclip, UploadSimple } from "@phosphor-icons/react";
+import { FloppyDisk, Paperclip, Plus, UploadSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { api, ApiError, type PasteDetail } from "@/api";
@@ -15,6 +15,7 @@ import { useDraft } from "@/hooks/use-draft";
 import { useShareBase } from "@/hooks/use-config";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
 import { previewTitle } from "@/lib/title";
+import { validateDraft, type FieldError } from "@/lib/validation";
 import { absolute, bytes } from "@/lib/format";
 
 export type ComposerMode = "create" | "edit";
@@ -35,6 +36,7 @@ export function ComposerScreen({
   const shareBase = useShareBase();
   const { draft, set, addFiles, removeFile, reset, load, counts } = useDraft();
   const [pending, setPending] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const [dragging, setDragging] = useState(false);
   const [wrap, setWrap] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia("(max-width: 720px)").matches,
@@ -84,6 +86,16 @@ export function ComposerScreen({
 
   const submit = useCallback(async () => {
     if (pending) return;
+    const problems = validateDraft(draft);
+    if (problems.length > 0) {
+      setFieldErrors(problems);
+      toast("Check the highlighted fields", { description: problems[0].message });
+      const selector =
+        problems[0].field === "text" ? "#paste-source" : `[data-field="${problems[0].field}"]`;
+      document.querySelector<HTMLElement>(selector)?.focus();
+      return;
+    }
+    setFieldErrors([]);
     if (!hasText && draft.files.length === 0) return;
     setPending(true);
     const form = new FormData();
@@ -120,9 +132,14 @@ export function ComposerScreen({
         toast("Gone · deleted elsewhere");
         navigate({ to: "/recent" });
       } else if (error instanceof ApiError && error.status === 413) {
-        toast("Too large");
+        toast.error("Could not save the paste", { description: "It is larger than the limit." });
+      } else if (error instanceof ApiError && error.field) {
+        setFieldErrors([{ field: error.field as FieldError["field"], message: error.message }]);
+        toast.error("Could not save the paste", { description: error.message });
+      } else if (error instanceof ApiError) {
+        toast.error("Could not save the paste", { description: error.message });
       } else {
-        toast("Could not save");
+        toast.error("Could not save the paste", { description: "The server did not answer." });
       }
     } finally {
       setPending(false);
@@ -261,7 +278,7 @@ export function ComposerScreen({
         }}
         data-dropzone="true"
         data-dragging={dragging ? "true" : undefined}
-        className="relative grid min-h-[340px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-cols-[minmax(0,1fr)_264px]"
+        className="relative grid grid-rows-[minmax(300px,52vh)_auto] border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_264px] lg:overflow-hidden"
       >
         <div
           className="flex min-h-0 min-w-0 cursor-text flex-col border-b border-[var(--border)] lg:border-b-0 lg:border-r"
@@ -331,15 +348,20 @@ export function ComposerScreen({
 
         <PasteOptions
           draft={draft}
-          set={set}
+          set={(patch) => {
+            if (fieldErrors.length > 0) setFieldErrors([]);
+            set(patch);
+          }}
           detected={detected}
           pending={pending}
           ctaLabel={commitLabel}
+          ctaIcon={mode === "edit" ? <FloppyDisk size={16} /> : <Plus size={16} weight="bold" />}
           onSubmit={() => void submit()}
           onClearFiles={() => {
             for (const file of draft.files) removeFile(file.key);
           }}
           locked={initial?.locked}
+          errors={fieldErrors}
         />
 
         {dragging ? (

@@ -100,7 +100,7 @@ Environment:
   PASTE_URL                default http://127.0.0.1:8080 (inside the container)
   PASTE_TOKEN              bearer token, optional
   PASTE_INSECURE           set to 1 to skip TLS verification (only for https://paste.local)
-  PASTE_AUTH_ID      an authenticating proxy service token, optional
+  PASTE_AUTH_ID      service token id, sent as X-Auth-Client-Id, optional
   PASTE_AUTH_SECRET
 `)
 }

@@ -1,7 +1,7 @@
 # Messer Paste
 
 A minimal pastebin for text, images and files — drop it, paste it, edit it, burn it. Single user,
-self-hosted, behind an authenticating proxy at **paste.example.com**.
+self-hosted at **paste.example.com**, meant to sit behind your own access layer.
 
 - **Backend:** Go 1.26, chi, SQLite (`modernc`, no cgo), content on disk
 - **Frontend:** React 19 + Vite 8 + TanStack Router/Query, Messer UI (port 1, brand `paste`)
@@ -49,7 +49,7 @@ mpaste ls -q arm64                          # search with match snippets
 ```
 
 On the host that runs the container, `docker exec -i messer-paste mpaste put -` needs no token;
-from anywhere else set `PASTE_URL` and a bearer token (or a an authenticating proxy service token).
+from anywhere else set `PASTE_URL` and a bearer token (or a service token for an identity-aware proxy).
 
 Expiry is `expires_in` seconds (`0` = never). Burn pastes are capped at 10 MB because the reveal
 returns the payload inline.

@@ -3,12 +3,12 @@
   "info": {
     "title": "Messer Paste",
     "version": "0.2.0",
-    "description": "Single-user pastebin. Text, images and files with expiry, burn-after-reading and SSE live updates. Machine clients authenticate with a bearer token from a 0600 file, or a an authenticating proxy service token."
+    "description": "Single-user pastebin. Text, images and files with expiry, burn-after-reading and SSE live updates. Machine clients authenticate with a bearer token from a 0600 file, or a service token for the proxy in front."
   },
   "servers": [
     {
       "url": "https://paste.example.com",
-      "description": "private app (an authenticating proxy)"
+      "description": "private app (behind your own access layer)"
     },
     {
       "url": "https://pub.example.com",
@@ -174,6 +174,10 @@
               },
               "message": {
                 "type": "string"
+              },
+              "field": {
+                "type": "string",
+                "description": "the form control an E_INVALID belongs to"
               }
             }
           }

@@ -102,6 +102,18 @@ func NewService(store Store, tree *Storage, limits Limits, events Publisher, log
 
 func (s *Service) Tree() *Storage { return s.tree }
 
+// FieldError names the form control a validation failure belongs to, so a client can highlight it
+// instead of guessing from prose. Is() keeps errors.Is(err, ErrInvalid) working without wrapping.
+type FieldError struct {
+	Field   string
+	Message string
+}
+
+func (e FieldError) Error() string        { return "invalid: " + e.Message }
+func (e FieldError) Is(target error) bool { return target == ErrInvalid }
+
+func fieldError(field, message string) error { return FieldError{Field: field, Message: message} }
+
 // PublicSpec is what the public host knows about its reader: whether the unlock cookie checked out
 // and which client is asking (for the once-an-hour view count).
 type PublicSpec struct {
@@ -109,9 +121,10 @@ type PublicSpec struct {
 	IP       string
 }
 
-// applyAccess validates the v0.3 fields and stamps them onto the record. Public means someone
-// without the Access policy can read it, so it must expire, it cannot burn (burn consumes the body
-// on a request we cannot attribute), and a password has to be long enough to be worth hashing.
+// applyAccess validates the v0.3 fields and stamps them onto the record. Public means someone who is
+// not you can read it — the proxy does not stand in front of that host — so it must expire, it cannot
+// burn (burn consumes the body on a request we cannot attribute), and a password has to be long
+// enough to be worth hashing.
 // maxViews 0 means "no cap", which is also how an existing cap is removed: the form always sends
 // the field, so absence is not a signal.
 func applyAccess(p *Paste, visibility, password string, clearPassword bool, maxViews, expiresIn int64) error {
@@ -120,7 +133,7 @@ func applyAccess(p *Paste, visibility, password string, clearPassword bool, maxV
 		visibility = VisibilityPrivate
 	case VisibilityPrivate, VisibilityPublic:
 	default:
-		return fmt.Errorf("%w: unknown visibility", ErrInvalid)
+		return fieldError("visibility", "unknown visibility")
 	}
 	p.Visibility = visibility
 	if visibility == VisibilityPrivate {
@@ -129,13 +142,13 @@ func applyAccess(p *Paste, visibility, password string, clearPassword bool, maxV
 		return nil
 	}
 	if expiresIn <= 0 {
-		return fmt.Errorf("%w: a public paste must expire", ErrInvalid)
+		return fieldError("expiry", "a public paste must expire")
 	}
 	if p.Burn {
-		return fmt.Errorf("%w: a public paste cannot burn", ErrInvalid)
+		return fieldError("burn", "a public paste cannot burn")
 	}
 	if maxViews < 0 {
-		return fmt.Errorf("%w: max views cannot be negative", ErrInvalid)
+		return fieldError("max_views", "max views cannot be negative")
 	}
 	if maxViews > 0 {
 		value := maxViews
@@ -148,7 +161,7 @@ func applyAccess(p *Paste, visibility, password string, clearPassword bool, maxV
 		p.PasswordHash = ""
 	case password != "":
 		if len(password) < 8 {
-			return fmt.Errorf("%w: a password needs at least 8 characters", ErrInvalid)
+			return fieldError("password", "a password needs at least 8 characters")
 		}
 		hash, err := HashPassword(password)
 		if err != nil {
