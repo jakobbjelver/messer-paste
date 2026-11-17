@@ -100,9 +100,18 @@ Environment:
   PASTE_URL                default http://127.0.0.1:8080 (inside the container)
   PASTE_TOKEN              bearer token, optional
   PASTE_INSECURE           set to 1 to skip TLS verification (only for https://paste.local)
-  PASTE_AUTH_ID      service token id, sent as X-Auth-Client-Id, optional
-  PASTE_AUTH_SECRET
+  PASTE_AUTH_ID            service-token id for a proxy in front of the app, optional
+  PASTE_AUTH_SECRET        the other half of that token
+  PASTE_AUTH_ID_HEADER     header to send the id in (default X-Auth-Client-Id)
+  PASTE_AUTH_SECRET_HEADER header to send the secret in (default X-Auth-Client-Secret)
 `)
+}
+
+func envOr(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func baseURL() string {
@@ -116,13 +125,17 @@ func do(req *http.Request) (*http.Response, error) {
 	if token := os.Getenv("PASTE_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	// A proxy may want a service token. Every proxy spells the headers differently, so the names
+	// are configuration rather than a vendor baked into the client.
 	if id := os.Getenv("PASTE_AUTH_ID"); id != "" {
-		req.Header.Set("X-Auth-Client-Id", id)
-		req.Header.Set("X-Auth-Client-Secret", os.Getenv("PASTE_AUTH_SECRET"))
+		req.Header.Set(envOr("PASTE_AUTH_ID_HEADER", "X-Auth-Client-Id"), id)
+		if secret := os.Getenv("PASTE_AUTH_SECRET"); secret != "" {
+			req.Header.Set(envOr("PASTE_AUTH_SECRET_HEADER", "X-Auth-Client-Secret"), secret)
+		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if os.Getenv("PASTE_INSECURE") == "1" {
-		// Only for https://paste.local, whose certificate is issued by the estate CA.
+		// Only for a host whose certificate your own CA issued.
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 	}
 	return (&http.Client{Timeout: 30 * time.Second, Transport: transport}).Do(req)

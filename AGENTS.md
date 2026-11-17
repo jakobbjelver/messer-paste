@@ -1,82 +1,61 @@
 # AGENTS.md — Messer Paste
 
-A single-user pastebin at `paste.example.com`, served by one Go binary, meant to run behind an
+A single-user pastebin for text, images and files, served by one Go binary, meant to run behind an
 authenticating proxy.
 
 ## What this is
 
-Text, images and files, pasted or dropped, with expiry, burn-after-reading and live updates across
-every open browser. One owner, no accounts and no sharing controls: the Access wall is the
-only gate. The unusual part is the storage split — metadata in SQLite on the SSD, every byte of
-content in a directory tree on the Media volume — and the UI updates over one SSE stream, never by
+Text, images and files, pasted or dropped, with expiry, burn-after-reading, public read-only links
+and live updates across every open browser. One owner, no accounts and no sharing controls: the proxy
+is the only gate. The unusual part is the storage split — metadata in SQLite, every byte of content in
+a directory tree with the original filenames — and the UI updates over one SSE stream, never by
 polling.
 
 ## Read first
 
-- `PROJECT.yaml` — the machine-readable facts (tier, stack, deploy, ports, exceptions).
-- `README.md` — how to run it.
-- Skill `messer-paste` — live state, diagnosis ladders and traps.
-- `.hermes/plans/2026-11-16_115356-messer-paste-build.md` — the build plan this came from.
+- `README.md` — how to run it, and the API in one table.
+- `docs/openapi.json` — the contract. Code that disagrees with it is a bug in the code.
+- `docs/llms.txt` — the primer an agent reads before it touches anything.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `cmd/messer-paste/` | entry point; `doctor` subcommand |
+| `cmd/paste/` | the `mpaste` client, same binary, different door |
 | `internal/paste/` | domain, slugs, content tree, service rules, expiry, events |
-| `internal/store/` | SQLite rows (pastes, files, burn tombstones) |
-| `internal/httpapi/` | the only place a request is parsed or a status chosen; SSE hub |
+| `internal/store/` | SQLite rows (pastes, files, burn tombstones, view ledger) |
+| `internal/httpapi/` | the only place a request is parsed or a status chosen; SSE hub; the public host router |
 | `web/web.go` | embeds `web/app/dist`, SPA fallback, 503 when unbuilt |
 | `web/app/` | React app (TanStack Router + Query, Messer UI) |
-| `deploy/` | container assets (the Dockerfile is at the root, from the template) |
-| `actions/actions.json` | Portal dev-server action |
-
-## Commands
-
-```bash
-make dev        # Go :8015 + Vite :3015, one trap for both
-make test       # go test (builds the web first; the binary embeds dist)
-make lint       # fmt-check + vet
-make typecheck  # tsc -b --noEmit
-make build      # web + Go binary in bin/
-make check      # fmt-check + vet + race + typecheck
-make doctor     # db, content root, row/dir reconciliation, index, free space
-make install-client  # `mpaste` on PATH (the machine client)
-```
-
-Every command is non-interactive and exits non-zero on failure.
 
 ## Invariants
 
-- Content lives under `PASTE_ROOT/<SLUG>/` on the Media bind mount; SQLite lives on the SSD
-  (`${SERVER_CONFIGS_DIR}/apps/paste/data`). A reset of one must be reconcilable from the other.
-- The container publishes no host port. Caddy reaches `messer-paste:8080` on `server_network`.
-- Expiry, burn and purge delete permanently. There is no trash and no restore.
-- The API is `/api/v1`, JSON in/out, RFC 3339 UTC timestamps, errors shaped
-  `{"error":{"code","message"}}` with a stable `E_*` code. `docs/openapi.json` is part of the
-  contract; a breaking change is a version bump.
-- Files are addressed by `public_id`, never by the row id. Slugs and file ids share the same
-  31-character alphabet.
-- Search is SQLite FTS5 (trigram) and is written in the same transaction as the row. A paste whose
-  body is not in the index is a bug, and `doctor` reports index drift.
-- `/api/v1/events` is the only EventSource in the app; the `/ui` sink never opens one (the conformance
-  harness waits for `networkidle`).
-- No auth in the app. The proxy in front is the gate; a 200 from an unauthenticated public request
-  is a security bug. Machine clients use a bearer token from a `0600` file or a CF service token —
-  never a checked-in `.env`.
-- An agent creates pastes through `mpaste put` or the API, never by writing into
-  `/content`.
-- Uploads are streamed to a staging dir, committed by rename/copy, and every name passes `SafeName`.
+- **A handle is a cursor, never an id.** Slugs are 8 characters from a 31-character alphabet that
+  omits `0`/`O` and `1`/`I`; no endpoint returns an auto-increment id.
+- **`internal/httpapi` owns the status code.** Nothing below it writes a response.
+- **Content never lives in the database.** A paste is a directory; the row is an index into it.
+- **Burn is a tombstone.** The reveal response carries the payload and the delete; a second visitor
+  gets `410`, not `404`.
+- **The public host is a router, not a second app.** A private slug on the public host is `404`, and
+  an unknown method is `404` too, so the route table cannot be probed.
+- **Secrets are `0600` files** beside the database, created on first boot. Never in the environment,
+  never in git.
 
-## Working rules
+## Gates
 
-- Deploy is CI → image → the deploy runner. Never `docker compose` a the deploy runner stack.
-- The dev server is started from the Portal action, never from a shell that outlives the session.
-- Secrets are `0600` files, never git, never a the deploy runner stack environment.
-- Delete the old layer in the same change that ships the new one. No compatibility shims.
-- Update `PROJECT.yaml`, this file and the skill in the same PR as a structural change.
+```bash
+make check     # fmt-check, vet, race tests, and the SPA's tsc
+make doctor    # database, content root, row/directory drift
+```
 
-## Where the depth is
+`make doctor` checks the database, the content root, and drift between rows and directories.
 
-Skill `messer-paste` — operating the live thing, diagnosis, incidents and references.
-Plan: `.hermes/plans/2026-11-16_115356-messer-paste-build.md`.
+## Conventions
+
+- Errors are a JSON envelope: `{"error":{"code":"E_INVALID","message":"…","field":"password"}}`. A
+  server sentence lands on the right control because `field` names it.
+- Every list is cursor paged and answers `items`, `next_cursor`, `has_more`, `total`, `took_ms`.
+- The UI is Messer UI: no handwritten reusable primitives, one icon family, zero radius, Golos for
+  words and JetBrains Mono for code and keycaps.
+- Copy is sentence case, second person, and says what happened rather than what failed.

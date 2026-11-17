@@ -34,3 +34,10 @@ server.token
 
 # Generated per build (scripts/gen-version.mjs)
 web/app/src/lib/version.ts
+
+# Internal to the deployment, not to the project: canon bookkeeping, host actions, the skill
+# template and local plans name paths that belong to one machine.
+MESSER.md
+actions/
+docs/SKILL.template.md
+.hermes/

@@ -43,9 +43,8 @@ export default defineConfig({
   build: { outDir: "dist", emptyOutDir: true },
   server: {
     host: true,
-    // Reached through Caddy as paste-dev.example.com / paste-dev.local, and as pub.localhost for the
-    // public reader in development.
-    allowedHosts: [".localhost", ".local", ".localhost"],
+    // Reached through a local proxy as something.local, and as pub.localhost for the public reader.
+    allowedHosts: [".local", ".localhost"],
     // changeOrigin: false keeps the browser's Host, which is how the dev server can answer as the
     // public host (http://pub.localhost:3015) without a second proxy.
     proxy: { "/api": { target: apiOrigin, changeOrigin: false } },

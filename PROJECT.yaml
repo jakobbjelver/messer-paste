@@ -1,6 +1,7 @@
 # PROJECT.yaml — "Messer Paste"
-# The machine-readable facts. The audit cross-checks this file against the repo, the skill and
-# ~/Server/services.yaml. A false manifest is worse than no manifest: keep it true.
+# The machine-readable facts. A false manifest is worse than no manifest: keep it true. The
+# host-specific half (domain, stack, service key, process manager) is deliberately absent: this
+# repository is public, and where it runs is not a fact about the repository.
 
 schema: 1
 standard: "1.1"
@@ -25,16 +26,10 @@ stack:
 deploy:
   kind: "docker"                 # docker | cloudflare-worker | pm2 | store | none
   image: "ghcr.io/jakobbjelver/messer-paste"
-  stack: "apps"                  # stack in ~/Server
-  service: "paste"               # service key in services.yaml
-  domain: "paste.example.com"
-  dev_domain: "paste-dev.example.com"
 
 dev:
   command: "make dev"
   ports: [3015, 8015]
-  pm2: "messer-paste-dev"
-  action: "actions/actions.json"
 
 health: "/healthz"
 
