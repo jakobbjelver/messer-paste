@@ -3,6 +3,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import {
   Clock,
+  DotsThree,
   FileText,
   Files,
   Fire,
@@ -17,6 +18,8 @@ import { api, type PasteRow } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BackLink } from "@/components/ui/back-link";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InstallHint } from "@/components/install-hint";
 import { useLive } from "@/hooks/use-live-events";
@@ -177,6 +180,7 @@ export function RecentPage() {
 
   return (
     <PageContainer className="py-7">
+      <BackLink href="/" label="New paste" className="mb-4" />
       <PageHead
         eyebrow={`${total} ${total === 1 ? "paste" : "pastes"}${search ? ` · ${took} ms` : ""}`}
         title={search ? `Results for “${search}”` : "Recent"}
@@ -189,14 +193,30 @@ export function RecentPage() {
         }
         actions={
           rows.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setPurgeOpen(true)}
-              className="inline-flex h-8 cursor-pointer items-center gap-2 border border-[color-mix(in_oklab,var(--destructive)_42%,var(--border))] bg-[var(--surface)] px-3 text-sm text-[var(--destructive)] hover:bg-[color-mix(in_oklab,var(--destructive)_9%,transparent)]"
-            >
-              <Trash size={14} aria-hidden="true" />
-              Purge all
-            </button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Archive actions"
+                  className="grid size-8 cursor-pointer place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                >
+                  <DotsThree size={18} weight="bold" aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-44 rounded-none border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-pop"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPurgeOpen(true)}
+                  className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-sm text-[var(--destructive)] hover:bg-[color-mix(in_oklab,var(--destructive)_9%,transparent)]"
+                >
+                  <Trash size={14} aria-hidden="true" />
+                  Purge all
+                </button>
+              </PopoverContent>
+            </Popover>
           ) : null
         }
       />

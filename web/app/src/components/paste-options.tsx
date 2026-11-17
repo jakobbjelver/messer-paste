@@ -183,20 +183,27 @@ export function PasteOptions({
 
           {draft.visibility === "public" ? (
             <>
-              <label className="grid gap-1">
-                <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+              {/* A <div>, not a <label>: a label activates its first labelable descendant, which was the
+                  Generate button — so a tap on the eye regenerated the password on iOS. */}
+              <div className="grid gap-1">
+                <label
+                  htmlFor="paste-password"
+                  className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]"
+                >
                   Password
-                </span>
-                <span className="flex h-8 w-full min-w-0 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
+                </label>
+                <div className="flex h-8 w-full min-w-0 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
                   <button
                     type="button"
                     onClick={generate}
                     aria-label="Generate a password"
-                    className="grid size-7 shrink-0 cursor-pointer place-items-center text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                    className="flex h-full shrink-0 cursor-pointer items-center gap-1 border-r border-[var(--border)] px-1.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
                   >
-                    <Sparkle size={14} aria-hidden="true" />
+                    <Sparkle size={11} aria-hidden="true" />
+                    Generate
                   </button>
                   <input
+                    id="paste-password"
                     type={reveal ? "text" : "password"}
                     data-field="password"
                     value={draft.password}
@@ -208,7 +215,7 @@ export function PasteOptions({
                     onChange={(event) =>
                       set({ password: event.target.value, clearPassword: false })
                     }
-                    className="h-full min-w-0 flex-1 bg-transparent px-1 text-sm text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
+                    className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-sm text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
                   />
                   <button
                     type="button"
@@ -223,7 +230,7 @@ export function PasteOptions({
                       <Eye size={14} aria-hidden="true" />
                     )}
                   </button>
-                </span>
+                </div>
                 {errorFor("password") ? (
                   <span
                     role="alert"
@@ -233,7 +240,7 @@ export function PasteOptions({
                     {errorFor("password")}
                   </span>
                 ) : null}
-              </label>
+              </div>
               <label className="grid gap-1">
                 <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
                   Reader limit
@@ -308,15 +315,27 @@ export function PasteOptions({
           tip="Opening the paste consumes it: the text and files are deleted on the first reveal, on every device."
           error={errorFor("burn")}
         >
-          <label className="flex h-8 cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]">
+          <label
+            className={`flex h-8 items-center gap-2 text-sm ${
+              draft.visibility === "public"
+                ? "cursor-not-allowed text-[var(--text-3)]"
+                : "cursor-pointer text-[var(--foreground)]"
+            }`}
+          >
             <Switch
               data-field="burn"
               checked={draft.burn}
+              disabled={draft.visibility === "public"}
               onCheckedChange={(burn) => set({ burn })}
               aria-label="Burn after reading"
             />
             One read, then gone
           </label>
+          {draft.visibility === "public" ? (
+            <p className="m-0 text-[11px] leading-snug text-[var(--text-3)]">
+              A public paste has to expire, so burning is off. Switch to private to use it.
+            </p>
+          ) : null}
         </Section>
       </div>
 

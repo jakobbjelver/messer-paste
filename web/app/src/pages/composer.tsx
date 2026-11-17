@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api, ApiError, type PasteDetail } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
+import { BackLink } from "@/components/ui/back-link";
 import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
@@ -188,6 +189,13 @@ export function ComposerScreen({
     };
   }, [addFiles, draft.text, set, submit]);
 
+  // A phone opens the keyboard the moment the editor takes focus, which covers half the screen before
+  // a single word is written. A mouse keeps the caret parked where typing starts.
+  const coarsePointer = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches,
+    [],
+  );
+
   const onFiles = (files: File[]) => {
     if (files.length === 0) return;
     addFiles(files);
@@ -196,6 +204,7 @@ export function ComposerScreen({
 
   return (
     <PageContainer className="py-7">
+      {mode === "create" ? <BackLink href="/recent" label="Recent" className="mb-4" /> : null}
       <PageHead
         eyebrow={mode === "edit" && slug ? `Editing · ${slug}` : "Draft"}
         title={
@@ -278,7 +287,7 @@ export function ComposerScreen({
         }}
         data-dropzone="true"
         data-dragging={dragging ? "true" : undefined}
-        className="relative grid grid-rows-[minmax(300px,52dvh)_auto] border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_264px] lg:overflow-hidden"
+        className="relative grid grid-rows-[minmax(160px,26dvh)_auto] border border-[var(--border)] bg-[var(--surface)] lg:h-[538px] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_264px] lg:overflow-hidden"
       >
         <div
           className="flex min-h-0 min-w-0 cursor-text flex-col border-b border-[var(--border)] lg:border-b-0 lg:border-r"
@@ -330,7 +339,7 @@ export function ComposerScreen({
             language={detected}
             wrap={wrap}
             placeholder="Paste or type… drop files anywhere"
-            autoFocus
+            autoFocus={!coarsePointer}
           />
 
           <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-3 text-[11px] tabular-nums text-[var(--text-3)]">

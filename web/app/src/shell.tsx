@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 
 import { AppShell, type NavItem } from "@/components/ui/app-shell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -83,8 +83,18 @@ export function Shell() {
           }
         >
           {searchOpen && showSearch ? (
-            <div className="border-b border-[var(--border)] bg-[var(--background)] px-4 py-2 sm:hidden">
-              <GlobalSearch variant="inline" onDone={() => setSearchOpen(false)} />
+            <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-4 py-2 sm:hidden">
+              <div className="min-w-0 flex-1">
+                <GlobalSearch variant="inline" onDone={() => setSearchOpen(false)} />
+              </div>
+              <button
+                type="button"
+                aria-label="Close search"
+                onClick={() => setSearchOpen(false)}
+                className="grid size-8 shrink-0 cursor-pointer place-items-center border border-[var(--border)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
             </div>
           ) : null}
           {isPublic && !publicReady ? (
