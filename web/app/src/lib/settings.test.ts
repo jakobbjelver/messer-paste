@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { byteUnit, byteValue, defaultLabel, durationLabel, isDefault, lockReason, rowUnit } from "./settings";
+import { byteUnit, byteValue, defaultLabel, durationLabel, isDefault, LOCK_CLOSER, lockReason, rowUnit } from "./settings";
 
 describe("byteUnit", () => {
   it("reads a byte count in the unit that fits it", () => {
@@ -88,8 +88,23 @@ describe("rowUnit", () => {
 });
 
 describe("lockReason", () => {
-  it("says which kind of lock it is", () => {
-    expect(lockReason({ boot: false, env: "PUBLIC_HOST" })).toContain("Set by PUBLIC_HOST in the environment");
-    expect(lockReason({ boot: true, env: "PORT" })).toContain("PORT is read when the process starts");
+  const text = (parts: { text: string }[]) => parts.map((part) => part.text).join("");
+  const mono = (parts: { mono?: boolean; text: string }[]) =>
+    parts.filter((part) => part.mono).map((part) => part.text);
+
+  it("names the variable in mono inside the sentence", () => {
+    expect(mono(lockReason({ boot: false, env: "PUBLIC_HOST" }))).toEqual(["PUBLIC_HOST"]);
+    expect(text(lockReason({ boot: false, env: "PUBLIC_HOST" }))).toContain(
+      "Set by PUBLIC_HOST in the environment, so it cannot be changed here.",
+    );
+    expect(mono(lockReason({ boot: true, env: "PORT" }))).toEqual(["PORT"]);
+    expect(text(lockReason({ boot: true, env: "PORT" }))).toBe("PORT is read when the process starts.");
+  });
+
+  it("shares one closing line, said once", () => {
+    expect(LOCK_CLOSER).toBe("Restart the container to change it.");
+    for (const parts of [lockReason({ boot: true, env: "PORT" }), lockReason({ boot: false, env: "PUBLIC_HOST" })]) {
+      expect(text(parts)).not.toContain("Restart");
+    }
   });
 });

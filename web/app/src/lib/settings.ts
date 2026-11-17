@@ -64,14 +64,27 @@ export function defaultLabel(item: Pick<Setting, "kind" | "unit" | "default">): 
 }
 
 /**
- * Why a row cannot be edited here. The variable's name is in the code box beside the tip; the tip
- * carries the rule, because a bare name says where a value comes from and not why it is stuck.
+ * The closing line every lock tip shares. It is the part a person needs once and sees again on the next
+ * locked row, so it is set apart in italics.
  */
-export function lockReason(item: Pick<Setting, "boot" | "env">): string {
+export const LOCK_CLOSER = "Restart the container to change it.";
+
+/** A tip is prose with one piece of code in it: the variable that owns the value. */
+export type TipPart = { mono?: boolean; text: string };
+
+/**
+ * Why a row cannot be edited here. The variable's own name is set in mono inside the sentence, because a
+ * bare name in a code box says where a value comes from and not why it is stuck.
+ */
+export function lockReason(item: Pick<Setting, "boot" | "env">): TipPart[] {
   if (item.boot) {
-    return `${item.env} is read when the process starts and never changes after. Restart the container to change it.`;
+    return [{ mono: true, text: item.env }, { text: " is read when the process starts." }];
   }
-  return `Set by ${item.env} in the environment, so it cannot be changed here. Remove the variable and restart to edit the value.`;
+  return [
+    { text: "Set by " },
+    { mono: true, text: item.env },
+    { text: " in the environment, so it cannot be changed here. Remove the variable to edit this value." },
+  ];
 }
 
 /**

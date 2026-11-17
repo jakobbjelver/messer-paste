@@ -11,7 +11,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLive } from "@/hooks/use-live-events";
-import { UNIT_BYTES, type ByteUnit, byteValue, defaultLabel, durationLabel, isDefault, lockReason, rowUnit } from "@/lib/settings";
+import { UNIT_BYTES, type ByteUnit, byteValue, defaultLabel, durationLabel, isDefault, LOCK_CLOSER, lockReason, rowUnit } from "@/lib/settings";
 
 /** The values a page edits: key → value, with the server's own shape preserved. */
 type Draft = Record<string, unknown>;
@@ -145,19 +145,46 @@ function Row({
     );
   };
 
-  /** Where the value in force comes from, and the one action the row offers. */
-  const marker = locked ? (
-    <span className="flex shrink-0 items-center">
-      <code className="border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10.5px] tracking-[0.02em] text-[var(--text-2)]">
-        {item.env}
-      </code>
-      <InfoTip
-        text={lockReason(item)}
-        label={`Why ${item.label.toLowerCase()} is locked`}
-        className="-mr-1.5"
-      />
-    </span>
-  ) : atDefault ? (
+  /**
+   * The lock tip: the rule in prose, the variable that owns the value in mono, and the sentence every
+   * locked row shares in italics, so the part that repeats reads as a footnote rather than new news.
+   */
+  const tip = () => (
+    <>
+      {lockReason(item).map((part, index) =>
+        part.mono ? (
+          <code key={index} className="font-mono text-[10.5px] tracking-[0.02em] text-[var(--foreground)]">
+            {part.text}
+          </code>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}{" "}
+      <em className="italic text-[var(--text-3)]">{LOCK_CLOSER}</em>
+    </>
+  );
+
+  /** The provenance a row carries *before* its control: the unsaved chip, or the variable and its tip. */
+  const leading =
+    dirty || locked ? (
+      <span className={`flex shrink-0 items-center gap-2 ${locked ? "max-md:basis-full" : ""}`}>
+        {locked ? (
+          <>
+            <code className="border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10.5px] tracking-[0.02em] text-[var(--text-2)]">
+              {item.env}
+            </code>
+            <InfoTip text={tip()} label={`Why ${item.label.toLowerCase()} is locked`} />
+          </>
+        ) : (
+          <span className="border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-2)]">
+            unsaved
+          </span>
+        )}
+      </span>
+    ) : null;
+
+  /** The one action a row offers, in a slot whose width never changes. */
+  const marker = locked ? null : atDefault ? (
     <span className={`${MARKER} text-[var(--text-3)]`}>Default</span>
   ) : (
     <button
@@ -190,17 +217,10 @@ function Row({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center justify-start gap-x-3 gap-y-2 md:flex-nowrap md:justify-end md:pl-4">
+        {leading}
         {control()}
-        {/* A locked row carries two pieces of provenance (the variable and its rule): on a phone that is a
-            line of its own, consistently, instead of wrapping only where the variable name is long. */}
-        <span
-          className={`flex shrink-0 items-center gap-2 ${locked ? "max-md:basis-full" : ""}`}
-        >
-          {dirty ? (
-            <span className="border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-2)]">
-              unsaved
-            </span>
-          ) : null}
+        {/* A fixed slot: whether it holds RESET or DEFAULT, the control to its left never moves. */}
+        <span className="flex w-14 shrink-0 items-center justify-end" data-marker-slot>
           {marker}
         </span>
       </div>
