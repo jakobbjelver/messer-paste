@@ -11,7 +11,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLive } from "@/hooks/use-live-events";
-import { MIB, defaultLabel, durationLabel, inMiB, isDefault, lockReason } from "@/lib/settings";
+import { UNIT_BYTES, type ByteUnit, byteValue, defaultLabel, durationLabel, isDefault, lockReason, rowUnit } from "@/lib/settings";
 
 /** The values a page edits: key → value, with the server's own shape preserved. */
 type Draft = Record<string, unknown>;
@@ -35,6 +35,7 @@ const MARKER = "font-mono text-[10.5px] uppercase tracking-[0.1em]";
 function Row({
   item,
   value,
+  unit,
   onChange,
   error,
   dirty,
@@ -42,6 +43,8 @@ function Row({
 }: {
   item: Setting;
   value: unknown;
+  /** The unit a byte row is showing; undefined for every other kind. */
+  unit?: ByteUnit;
   onChange: (next: unknown) => void;
   error?: string;
   dirty?: boolean;
@@ -50,6 +53,8 @@ function Row({
   const locked = !item.editable || item.source === "env" || item.boot;
   const atDefault = isDefault(item, value);
   const bytes = item.unit === "bytes";
+  const shown = unit ?? "B";
+  const factor = bytes ? UNIT_BYTES[shown] : 1;
   const field =
     "h-8 border bg-[var(--surface)] px-2 text-sm tabular-nums text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
@@ -117,24 +122,24 @@ function Row({
       <span className="flex items-center gap-1.5">
         <input
           type={item.kind === "int" || bytes ? "number" : "text"}
-          value={bytes ? inMiB(value) : String(value ?? "")}
+          value={bytes ? byteValue(value, shown) : String(value ?? "")}
           disabled={locked}
-          step={bytes ? "0.5" : undefined}
-          min={bytes ? 0.001 : item.min}
-          max={bytes && item.max ? item.max / MIB : item.max}
+          step={bytes ? "any" : undefined}
+          min={bytes ? (item.min ?? 0) / factor : item.min}
+          max={bytes && item.max ? item.max / factor : item.max}
           aria-label={item.label}
           aria-invalid={error ? true : undefined}
           placeholder={item.key === "share_base" ? "the request's own origin" : undefined}
           onChange={(event) => {
             if (bytes) {
-              onChange(Math.round((Number(event.target.value) || 0) * MIB));
+              onChange(Math.round((Number(event.target.value) || 0) * factor));
               return;
             }
             onChange(item.kind === "int" ? Number(event.target.value) : event.target.value);
           }}
           className={`${field} ${width} ${error ? "border-[var(--destructive)]" : "border-[var(--border-strong)]"}`}
         />
-        {bytes ? <span className="text-[11px] text-[var(--text-3)]">MiB</span> : null}
+        {bytes ? <span className="text-[11px] text-[var(--text-3)]">{shown}</span> : null}
         {!bytes && item.unit ? <span className="text-[11px] text-[var(--text-3)]">{item.unit}</span> : null}
       </span>
     );
@@ -337,6 +342,7 @@ export function SettingsPage() {
                     key={item.key}
                     item={item}
                     value={draft?.[item.key]}
+                    unit={rowUnit(item, draft?.[item.key], base?.[item.key])}
                     onChange={(next) => set(item.key, next)}
                     error={errors[item.key]}
                     dirty={changed.includes(item.key)}
