@@ -204,7 +204,9 @@ export function ComposerScreen({
 
   return (
     <PageContainer className="py-7">
-      {mode === "create" ? <BackLink href="/recent" label="Recent" className="mb-4" /> : null}
+      {mode === "edit" && slug ? (
+        <BackLink href={`/${slug}`} label="Back to the paste" className="mb-4" />
+      ) : null}
       <PageHead
         eyebrow={mode === "edit" && slug ? `Editing · ${slug}` : "Draft"}
         title={

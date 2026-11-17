@@ -186,22 +186,23 @@ export function PasteOptions({
               {/* A <div>, not a <label>: a label activates its first labelable descendant, which was the
                   Generate button — so a tap on the eye regenerated the password on iOS. */}
               <div className="grid gap-1">
-                <label
-                  htmlFor="paste-password"
-                  className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]"
-                >
-                  Password
-                </label>
-                <div className="flex h-8 w-full min-w-0 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
+                <span className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="paste-password"
+                    className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]"
+                  >
+                    Password
+                  </label>
                   <button
                     type="button"
                     onClick={generate}
-                    aria-label="Generate a password"
-                    className="flex h-full shrink-0 cursor-pointer items-center gap-1 border-r border-[var(--border)] px-1.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                    className="-my-1 flex shrink-0 cursor-pointer items-center gap-1 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--text-3)] hover:text-[var(--foreground)]"
                   >
                     <Sparkle size={11} aria-hidden="true" />
                     Generate
                   </button>
+                </span>
+                <div className="flex h-8 w-full min-w-0 items-center border border-[var(--border-strong)] bg-[var(--surface)] focus-within:outline-solid focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[var(--ring)]">
                   <input
                     id="paste-password"
                     type={reveal ? "text" : "password"}
@@ -215,7 +216,7 @@ export function PasteOptions({
                     onChange={(event) =>
                       set({ password: event.target.value, clearPassword: false })
                     }
-                    className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-sm text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
+                    className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)]"
                   />
                   <button
                     type="button"

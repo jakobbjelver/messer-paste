@@ -1,4 +1,4 @@
-# Messer Paste
+<img src="docs/banner.png" alt="Messer Paste" width="100%">
 
 A single-user pastebin for text, images and files. One Go binary serves the API and the app; SQLite
 holds the metadata and plain files hold the content; every open tab updates over one SSE stream.
@@ -25,15 +25,17 @@ tenancy: one person owns the archive, and the proxy in front of it is the door.
 ## Run
 
 ```bash
-make docker            # docker build -t messer-paste .
 docker run -d --name paste \
   -p 127.0.0.1:8080:8080 \
   -v "$PWD/data:/data" \
   -v "$PWD/pastes:/pastes" \
-  messer-paste
+  ghcr.io/jakobbjelver/messer-paste:latest
 ```
 
-CI publishes the same build to `ghcr.io/jakobbjelver/messer-paste` on every push to `main`.
+Or build it yourself: `make docker` (Dockerfile in the repo, SPA embedded).
+
+CI publishes `ghcr.io/jakobbjelver/messer-paste` on every push to `main`, tagged with the commit and
+with `latest`.
 
 Two volumes: `/data` is the SQLite database, its WAL and the unlock key; `/pastes` is one directory
 per paste, holding the original filenames. Nothing else is stateful, and the image runs as a non-root

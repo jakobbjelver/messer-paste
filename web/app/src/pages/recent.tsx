@@ -19,7 +19,6 @@ import { PageContainer } from "@/components/ui/page-container";
 import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BackLink } from "@/components/ui/back-link";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InstallHint } from "@/components/install-hint";
 import { useLive } from "@/hooks/use-live-events";
@@ -180,7 +179,6 @@ export function RecentPage() {
 
   return (
     <PageContainer className="py-7">
-      <BackLink href="/" label="New paste" className="mb-4" />
       <PageHead
         eyebrow={`${total} ${total === 1 ? "paste" : "pastes"}${search ? ` · ${took} ms` : ""}`}
         title={search ? `Results for “${search}”` : "Recent"}
