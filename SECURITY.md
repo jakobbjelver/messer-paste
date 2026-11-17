@@ -2,9 +2,9 @@
 
 ## Reporting
 
-Email `jakob@bjelver.se` with the details, or open a private security advisory on GitHub. Please do
-not open a public issue for a vulnerability. Expect an answer within a few days; this is a
-single-person project, not a company.
+Open a **private security advisory** on GitHub (Security → Report a vulnerability). Please do not open
+a public issue for a vulnerability. Expect an answer within a few days; this is a single-person
+project, not a company.
 
 ## What this software assumes
 
