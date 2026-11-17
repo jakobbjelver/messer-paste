@@ -28,6 +28,8 @@ type Incoming struct {
 }
 
 type CreateInput struct {
+	// AutoTitle is nil when the caller did not say; false means "leave the title empty".
+	AutoTitle  *bool
 	Title      string
 	Text       string
 	Language   string
@@ -40,6 +42,7 @@ type CreateInput struct {
 }
 
 type UpdateInput struct {
+	AutoTitle  *bool
 	Title      string
 	Text       string
 	Language   string
@@ -398,7 +401,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 	for index := range files {
 		files[index].PublicID = NewPublicID()
 	}
-	p.Title = titleOr(in.Title, text, files)
+	p.Title = titleFor(in.Title, text, files, in.AutoTitle)
 	p.Kind = KindOf(text, files)
 	p.FileCount = len(files)
 	for _, file := range files {
@@ -491,7 +494,7 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 		ID:        current.ID,
 		Slug:      slug,
 		Text:      text,
-		Title:     titleOr(in.Title, text, files),
+		Title:     titleFor(in.Title, text, files, in.AutoTitle),
 		Language:  normalizeLanguage(in.Language, text, in.Files),
 		Kind:      KindOf(text, files),
 		TextBytes: int64(len(text)),
@@ -760,6 +763,15 @@ func isUnique(err error) bool {
 }
 
 // titleOr keeps a user title, otherwise derives one. The 200-char cap protects the UI, not the DB.
+// titleFor keeps the derivation behind one switch: a deployment can turn auto-titling off, and then
+// an untitled paste stays untitled instead of being named after its own first line.
+func titleFor(title, text string, files []File, auto *bool) string {
+	if title == "" && auto != nil && !*auto {
+		return ""
+	}
+	return titleOr(title, text, files)
+}
+
 func titleOr(raw, text string, files []File) string {
 	if trimmed := strings.TrimSpace(raw); trimmed != "" {
 		return truncate(trimmed, 200)

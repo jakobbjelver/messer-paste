@@ -121,6 +121,7 @@ export function ComposerScreen({
       const link = `${saved.visibility === "public" ? shareBase : window.location.origin}/${saved.slug}`;
       let copied = false;
       try {
+        if (!config?.copy_on_create) throw new Error("off");
         await navigator.clipboard.writeText(link);
         copied = true;
       } catch {

@@ -26,8 +26,14 @@ func (s *Server) listPastes(w http.ResponseWriter, r *http.Request) {
 			limit = value
 		}
 	}
+	query := r.URL.Query().Get("q")
+	if len([]rune(query)) < s.conf().SearchMinChars {
+		// A two-character floor exists so a stray keystroke does not scan the archive; below it,
+		// the list answers as if nothing was asked.
+		query = ""
+	}
 	result, err := s.svc.List(r.Context(), paste.ListOptions{
-		Query:  r.URL.Query().Get("q"),
+		Query:  query,
 		Limit:  limit,
 		Cursor: r.URL.Query().Get("cursor"),
 	})
@@ -62,6 +68,7 @@ func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	auto := s.conf().AutoTitle
 	in := paste.CreateInput{
 		Title:      fields["title"],
 		Text:       fields["text"],
@@ -72,6 +79,7 @@ func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
 		MaxViews:   maxViews(fields["max_views"]),
 		Burn:       fields["burn"] == "1",
 		Files:      files,
+		AutoTitle:  &auto,
 	}
 	if cap, ok := s.policy(w, in.Visibility, in.Burn, in.Password, in.MaxViews, len(files)); !ok {
 		return
@@ -100,6 +108,7 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	auto := s.conf().AutoTitle
 	in := paste.UpdateInput{
 		Title:         fields["title"],
 		Text:          fields["text"],
@@ -111,6 +120,7 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 		MaxViews:      maxViews(fields["max_views"]),
 		Burn:          fields["burn"] == "1",
 		Files:         files,
+		AutoTitle:     &auto,
 	}
 	for _, raw := range strings.Split(fields["keep"], ",") {
 		raw = strings.TrimSpace(raw)
