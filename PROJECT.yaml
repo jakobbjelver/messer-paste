@@ -4,7 +4,7 @@
 # repository is public, and where it runs is not a fact about the repository.
 
 schema: 1
-standard: "1.1"
+standard: "1.2"
 name: "messer-paste"
 display: "Messer Paste"
 family: "messer"                 # messer | personal | upstream
@@ -30,6 +30,10 @@ deploy:
 dev:
   command: "make dev"
   ports: [3015, 8015]
+
+visibility: "public"             # public | private
+pwa: true                         # installable surface: manifest, icons, worker
+settings: true                    # a settings page and GET/PATCH /api/v1/settings
 
 health: "/healthz"
 

@@ -42,6 +42,15 @@ polling.
 - **Secrets are `0600` files** beside the database, created on first boot. Never in the environment,
   never in git.
 
+## Commands
+
+```bash
+make check      # fmt-check, vet, race tests, SPA typecheck — the gate CI runs
+make doctor     # env and volume sanity, no network
+make e2e        # Playwright against the dev pair (needs both servers up)
+make dev        # API :8015 + Vite :3015
+```
+
 ## Gates
 
 ```bash
