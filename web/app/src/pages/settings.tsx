@@ -79,7 +79,7 @@ function Row({
           onChange={(event) =>
             onChange(item.kind === "int" ? Number(event.target.value) : event.target.value)
           }
-          className={`h-8 ${wide ? "w-[260px]" : "w-[168px]"} border bg-[var(--surface)] px-2 text-sm tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+          className={`h-8 ${wide ? "w-[220px] md:w-[260px]" : "w-[132px] md:w-[168px]"} border bg-[var(--surface)] px-2 text-sm tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
             error ? "border-[var(--destructive)]" : "border-[var(--border-strong)]"
           }`}
         />
@@ -108,9 +108,9 @@ function Row({
           </span>
         ) : null}
       </div>
-      <div className="flex items-center justify-between gap-3 md:justify-end md:pl-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:flex-nowrap md:justify-end md:pl-4">
         {control()}
-        <span className="w-[132px] shrink-0 text-right">
+        <span className="shrink-0 text-right md:w-[132px]">
           {dirty ? (
             <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--foreground)]">Unsaved</span>
           ) : item.source === "env" || item.boot ? (
