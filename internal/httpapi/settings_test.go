@@ -220,3 +220,52 @@ func post(t *testing.T, ts *httptest.Server, fields map[string]string) *http.Res
 	}
 	return res
 }
+
+func TestWritingTheDefaultClearsTheOverride(t *testing.T) {
+	ts := newServer(t)
+	base := ts.URL + api + "/settings"
+
+	// max_files defaults to 20; make it something else first.
+	if res, body := patchSettings(t, base, map[string]any{"max_files": 42}); res.StatusCode != http.StatusOK {
+		t.Fatalf("custom = %d %v", res.StatusCode, body)
+	}
+	if v := findSetting(readSettings(t, base).Items, "max_files"); v.Source != settings.FromCustom {
+		t.Fatalf("source = %s, want custom", v.Source)
+	}
+
+	// Writing the default is a reset, not an override that happens to equal it.
+	res, body := patchSettings(t, base, map[string]any{"max_files": 20})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("reset = %d %v", res.StatusCode, body)
+	}
+	after := readSettings(t, base)
+	if v := findSetting(after.Items, "max_files"); v.Source != settings.FromDefault {
+		t.Fatalf("source after writing the default = %s, want default", v.Source)
+	}
+	if after.Dirty != 0 {
+		t.Fatalf("custom count = %d, want 0", after.Dirty)
+	}
+}
+
+func TestOneBodySavesOneKeyAndClearsAnother(t *testing.T) {
+	ts := newServer(t)
+	base := ts.URL + api + "/settings"
+
+	if res, _ := patchSettings(t, base, map[string]any{"max_files": 42, "max_text_bytes": 4096}); res.StatusCode != http.StatusOK {
+		t.Fatal("setup failed")
+	}
+	// 2 MiB is max_text_bytes' default and 21 is not max_files'; one body, both effects.
+	if res, body := patchSettings(t, base, map[string]any{"max_text_bytes": 2 << 20, "max_files": 21}); res.StatusCode != http.StatusOK {
+		t.Fatalf("mixed = %d %v", res.StatusCode, body)
+	}
+	after := readSettings(t, base)
+	if v := findSetting(after.Items, "max_text_bytes"); v.Source != settings.FromDefault {
+		t.Fatalf("cleared key source = %s", v.Source)
+	}
+	if v := findSetting(after.Items, "max_files"); v.Source != settings.FromCustom || v.Value != float64(21) {
+		t.Fatalf("saved key = %+v", v)
+	}
+	if after.Dirty != 1 {
+		t.Fatalf("custom count = %d, want 1", after.Dirty)
+	}
+}

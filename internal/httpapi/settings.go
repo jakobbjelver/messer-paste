@@ -54,6 +54,7 @@ func (s *Server) patchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clean := map[string]any{}
+	var clear []string
 	keys := make([]string, 0, len(body))
 	for key := range body {
 		keys = append(keys, key)
@@ -80,10 +81,16 @@ func (s *Server) patchSettings(w http.ResponseWriter, r *http.Request) {
 			writeErrorDetail(w, http.StatusUnprocessableEntity, "E_INVALID", key, humanise(key, err))
 			return
 		}
+		// Writing the default is the same as clearing the override: the row returns to the default (or
+		// the environment) instead of being stored as a custom value that changes nothing.
+		if settings.IsDefault(def, checked) {
+			clear = append(clear, key)
+			continue
+		}
 		clean[key] = checked
 	}
 
-	if err := s.store.SaveSettings(r.Context(), clean); err != nil {
+	if err := s.store.WriteSettings(r.Context(), clean, clear); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -113,7 +120,7 @@ func (s *Server) resetSetting(w http.ResponseWriter, r *http.Request) {
 		writeErrorDetail(w, http.StatusConflict, "E_PINNED", key, def.Label+" is set by "+def.Env+".")
 		return
 	}
-	if err := s.store.DeleteSettings(r.Context(), []string{key}); err != nil {
+	if err := s.store.WriteSettings(r.Context(), nil, []string{key}); err != nil {
 		s.fail(w, r, err)
 		return
 	}

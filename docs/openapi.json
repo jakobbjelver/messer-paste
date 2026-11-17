@@ -692,7 +692,7 @@
       },
       "patch": {
         "summary": "Write settings",
-        "description": "Validates the whole body before writing anything. A key the environment owns answers 409 E_PINNED; a boot-only key answers 409 too.",
+        "description": "Validates the whole body before writing anything. A key the environment owns answers 409 E_PINNED; a boot-only key answers 409 too. A value equal to its default clears the stored override, so the key returns to the default (or the environment) as if it had been reset.",
         "requestBody": {
           "required": true,
           "content": {

@@ -35,9 +35,11 @@ func (s *Store) LoadSettings(ctx context.Context) (map[string]any, error) {
 	return out, rows.Err()
 }
 
-// SaveSettings writes the given keys in one transaction and returns the rows that changed.
-func (s *Store) SaveSettings(ctx context.Context, values map[string]any) error {
-	if len(values) == 0 {
+// WriteSettings applies one settings change in one transaction: the values to store and the keys whose
+// override is cleared. A partial write would leave the page and the database describing different worlds,
+// which is why "save these" and "clear those" are not two calls.
+func (s *Store) WriteSettings(ctx context.Context, values map[string]any, clear []string) error {
+	if len(values) == 0 && len(clear) == 0 {
 		return nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -59,21 +61,8 @@ func (s *Store) SaveSettings(ctx context.Context, values map[string]any) error {
 			return fmt.Errorf("save %s: %w", key, err)
 		}
 	}
-	return tx.Commit()
-}
-
-// DeleteSettings drops the overrides for the given keys: the default (or the environment) takes over.
-func (s *Store) DeleteSettings(ctx context.Context, keys []string) error {
-	if len(keys) == 0 {
-		return nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck // a rollback after commit is a no-op
-
-	for _, key := range keys {
+	// Clearing is the default (or the pinned environment value) taking over again.
+	for _, key := range clear {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, key); err != nil {
 			return fmt.Errorf("clear %s: %w", key, err)
 		}

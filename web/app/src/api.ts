@@ -181,8 +181,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
-  resetSetting: (key: string) =>
-    request<SettingsBody>(`/api/v1/settings/${key}`, { method: "DELETE" }),
   unlock: (slug: string, password: string) =>
     request<void>(`/api/v1/pastes/${slug}/unlock`, {
       method: "POST",

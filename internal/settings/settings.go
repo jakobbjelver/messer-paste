@@ -367,8 +367,21 @@ func Check(d Def, value any) (any, error) {
 	return nil, fmt.Errorf("%s: unknown kind %q", d.Key, d.Kind)
 }
 
+// IsDefault reports whether a value is the definition's own default. Such a value is not an override:
+// storing it would be a row that changes nothing, and a page reading it would show a provenance ("custom")
+// that no longer describes the value in force.
+func IsDefault(d Def, value any) bool {
+	if d.Kind == KindInt {
+		n, ok := asInt(value)
+		m, ok2 := asInt(d.Default)
+		return ok && ok2 && n == m
+	}
+	return value == d.Default
+}
+
 // Resolve walks the three layers and returns every setting with its winner. env is consulted by the
-// definition's variable name; stored is what the database holds.
+// definition's variable name; stored is what the database holds. A stored value equal to the default is
+// treated as absent, so FromCustom always means "differs from the default".
 func Resolve(env func(string) (string, bool), stored map[string]any) (map[string]Value, error) {
 	out := make(map[string]Value, len(Defs))
 	for _, d := range Defs {
@@ -376,7 +389,7 @@ func Resolve(env func(string) (string, bool), stored map[string]any) (map[string
 
 		// The database holds what the page last wrote. It is read first so that an environment
 		// value can win without destroying it.
-		if raw, ok := stored[d.Key]; ok {
+		if raw, ok := stored[d.Key]; ok && !IsDefault(d, raw) {
 			v.Value = raw
 			v.Source = FromCustom
 		}

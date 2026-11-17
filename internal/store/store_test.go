@@ -147,3 +147,45 @@ func TestOpenMigratesFilesTable(t *testing.T) {
 		t.Fatalf("public_id missing after migration: %v", err)
 	}
 }
+
+func TestWriteSettingsSavesAndClearsInOneCall(t *testing.T) {
+	ctx := context.Background()
+	st := open(t)
+
+	if err := st.WriteSettings(ctx, map[string]any{"max_files": int64(42), "burn_enabled": false}, nil); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, err := st.LoadSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["max_files"] != int64(42) || got["burn_enabled"] != false {
+		t.Fatalf("stored = %v", got)
+	}
+
+	// One call, two effects: the override that changed and the one that went back to its default.
+	if err := st.WriteSettings(ctx, map[string]any{"max_files": int64(21)}, []string{"burn_enabled"}); err != nil {
+		t.Fatalf("mixed write: %v", err)
+	}
+	got, err = st.LoadSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["max_files"] != int64(21) {
+		t.Fatalf("saved key = %v", got["max_files"])
+	}
+	if _, ok := got["burn_enabled"]; ok {
+		t.Fatal("a cleared key must be gone from the table")
+	}
+
+	if err := st.WriteSettings(ctx, nil, []string{"max_files"}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	got, err = st.LoadSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("after clearing everything: %v", got)
+	}
+}

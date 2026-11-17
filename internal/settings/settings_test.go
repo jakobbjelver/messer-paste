@@ -126,3 +126,49 @@ func TestUnknownStoredKeyIsIgnored(t *testing.T) {
 		t.Fatal("an unknown key must not appear in the resolved set")
 	}
 }
+
+func TestIsDefault(t *testing.T) {
+	text, _ := Lookup("max_text_bytes")
+	freeze, _ := Lookup("read_only")
+	expiry, _ := Lookup("default_expiry")
+	presets, _ := Lookup("expiry_choices")
+
+	for _, c := range []struct {
+		name  string
+		def   Def
+		value any
+		want  bool
+	}{
+		{"int at its default", text, int64(2 << 20), true},
+		{"int as a float", text, float64(2 << 20), true},
+		{"int away from its default", text, int64(150 << 20), false},
+		{"bool at its default", freeze, false, true},
+		{"bool away from its default", freeze, true, false},
+		{"duration at its default", expiry, "24h", true},
+		{"duration away from its default", expiry, "7d", false},
+		{"duration zero where zero is the default", Def{Kind: KindDuration, Default: "0"}, "0", true},
+		{"list at its default", presets, "1h,24h,7d,0", true},
+		{"list away from its default", presets, "1h,24h,7d,0,30d", false},
+	} {
+		if got := IsDefault(c.def, c.value); got != c.want {
+			t.Errorf("%s: IsDefault = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestResolveIgnoresAStoredDefault(t *testing.T) {
+	// A row written as the default before the write path learned to clear it must not read as custom:
+	// FromCustom has to keep meaning "differs from the default".
+	stored := map[string]any{"max_text_bytes": int64(2 << 20), "max_files": int64(42)}
+
+	values, err := Resolve(envOf(nil), stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := values["max_text_bytes"]; v.Source != FromDefault || v.Value.(int64) != 2<<20 {
+		t.Fatalf("a stored default = %+v, want the default layer", v)
+	}
+	if v := values["max_files"]; v.Source != FromCustom || v.Value.(int64) != 42 {
+		t.Fatalf("a stored override = %+v, want the custom layer", v)
+	}
+}
