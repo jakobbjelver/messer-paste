@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api, ApiError, type Setting } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead } from "@/components/page-head";
-import { BackLink } from "@/components/ui/back-link";
+import { AppBack } from "@/components/back";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLive } from "@/hooks/use-live-events";
@@ -24,20 +24,45 @@ function valuesOf(items: Setting[]): Draft {
  * A row the environment owns cannot be edited here, and says why with the variable's own name — the
  * name is the explanation, so there is no paragraph to read.
  */
+/** Bytes are for machines: a person sets this in MiB. */
+const MIB = 1024 * 1024;
+
+function inMiB(bytes: unknown): string {
+  const n = Number(bytes);
+  if (!Number.isFinite(n)) return "";
+  const mib = n / MIB;
+  return Number.isInteger(mib) ? String(mib) : mib.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+const PRESETS = ["1h", "24h", "7d", "30d", "0"];
+
+/**
+ * One setting, one row: what it is on the left, the control and who set it on the right.
+ *
+ * A row the environment owns cannot be edited here, and says why with the variable's own name in
+ * code — the name is the explanation, so there is no paragraph to read. A row that differs from the
+ * default offers the way back to it.
+ */
 function Row({
   item,
   value,
   onChange,
   error,
   dirty,
+  onReset,
 }: {
   item: Setting;
   value: unknown;
   onChange: (next: unknown) => void;
   error?: string;
   dirty?: boolean;
+  onReset: () => void;
 }) {
   const locked = !item.editable || item.source === "env" || item.boot;
+  const bytes = item.unit === "bytes";
+  const field =
+    "h-8 border bg-[var(--surface)] px-2 text-sm tabular-nums text-[var(--foreground)] outline-none placeholder:font-sans placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
   const control = () => {
     if (item.kind === "bool") {
       return (
@@ -47,6 +72,37 @@ function Row({
           onCheckedChange={(next) => onChange(next)}
           aria-label={item.label}
         />
+      );
+    }
+    if (item.kind === "list" && item.choices?.length) {
+      // The presets are buttons you turn on, not a string you spell.
+      const chosen = String(value ?? "").split(",").map((part) => part.trim());
+      return (
+        <span className="flex flex-wrap items-center gap-1">
+          {item.choices.map((choice) => {
+            const on = chosen.includes(choice);
+            return (
+              <button
+                key={choice}
+                type="button"
+                disabled={locked}
+                aria-pressed={on}
+                onClick={() => {
+                  const next = on ? chosen.filter((c) => c !== choice) : [...chosen, choice];
+                  if (next.length === 0) return;
+                  onChange(PRESETS.filter((p) => next.includes(p)).join(","));
+                }}
+                className={`h-7 cursor-pointer border px-2 text-[11px] font-medium uppercase tracking-[0.06em] disabled:cursor-not-allowed ${
+                  on
+                    ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+                    : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                }`}
+              >
+                {choice === "0" ? "never" : choice}
+              </button>
+            );
+          })}
+        </span>
       );
     }
     if (item.kind === "enum" || (item.kind === "duration" && item.choices?.length)) {
@@ -65,25 +121,31 @@ function Row({
         </Select>
       );
     }
-    const wide = item.kind === "text" || item.kind === "list";
+    const wide = item.kind === "text";
+    const width = wide ? "w-[220px] md:w-[260px]" : bytes ? "w-[84px] md:w-[96px]" : "w-[132px] md:w-[168px]";
     return (
       <span className="flex items-center gap-1.5">
         <input
-          type={item.kind === "int" ? "number" : "text"}
-          value={String(value ?? "")}
+          type={item.kind === "int" || bytes ? "number" : "text"}
+          value={bytes ? inMiB(value) : String(value ?? "")}
           disabled={locked}
-          min={item.min}
-          max={item.max}
+          step={bytes ? "0.5" : undefined}
+          min={bytes ? 0.001 : item.min}
+          max={bytes && item.max ? item.max / MIB : item.max}
           aria-label={item.label}
           aria-invalid={error ? true : undefined}
-          onChange={(event) =>
-            onChange(item.kind === "int" ? Number(event.target.value) : event.target.value)
-          }
-          className={`h-8 ${wide ? "w-[220px] md:w-[260px]" : "w-[132px] md:w-[168px]"} border bg-[var(--surface)] px-2 text-sm tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--text-3)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-            error ? "border-[var(--destructive)]" : "border-[var(--border-strong)]"
-          }`}
+          placeholder={item.key === "share_base" ? "the request's own origin" : undefined}
+          onChange={(event) => {
+            if (bytes) {
+              onChange(Math.round((Number(event.target.value) || 0) * MIB));
+              return;
+            }
+            onChange(item.kind === "int" ? Number(event.target.value) : event.target.value);
+          }}
+          className={`${field} ${width} ${error ? "border-[var(--destructive)]" : "border-[var(--border-strong)]"}`}
         />
-        {item.unit ? <span className="text-[11px] text-[var(--text-3)]">{item.unit}</span> : null}
+        {bytes ? <span className="text-[11px] text-[var(--text-3)]">MiB</span> : null}
+        {!bytes && item.unit ? <span className="text-[11px] text-[var(--text-3)]">{item.unit}</span> : null}
       </span>
     );
   };
@@ -94,10 +156,11 @@ function Row({
       className="grid gap-2 border-b border-[var(--border)] px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6"
     >
       <div className="grid gap-0.5">
-        <span className="flex items-center gap-1.5 text-sm text-[var(--foreground)]">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--foreground)]">
           {item.label}
-          {locked ? (
-            <Lock size={11} aria-hidden="true" className="text-[var(--text-3)]" />
+          {locked ? <Lock size={14} aria-hidden="true" className="text-[var(--text-3)]" /> : null}
+          {dirty ? (
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-2)]">unsaved</span>
           ) : null}
         </span>
         <span className="text-xs leading-snug text-[var(--text-2)]">{item.description}</span>
@@ -110,13 +173,21 @@ function Row({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:flex-nowrap md:justify-end md:pl-4">
         {control()}
-        <span className="shrink-0 text-right md:w-[132px]">
-          {dirty ? (
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--foreground)]">Unsaved</span>
-          ) : item.source === "env" || item.boot ? (
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-3)]">
+        <span className="flex shrink-0 items-center justify-end gap-2 md:w-[196px]">
+          {item.source === "custom" && !dirty ? (
+            <button
+              type="button"
+              onClick={onReset}
+              title={`Back to ${String(item.default)} — the built-in default`}
+              className="h-7 shrink-0 cursor-pointer border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            >
+              Reset
+            </button>
+          ) : null}
+          {item.source === "env" || item.boot ? (
+            <code className="border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10.5px] tracking-[0.02em] text-[var(--text-2)]">
               {item.env}
-            </span>
+            </code>
           ) : item.source === "custom" ? (
             <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-2)]">Custom</span>
           ) : (
@@ -178,6 +249,19 @@ export function SettingsPage() {
     });
   };
 
+  async function reset(key: string) {
+    try {
+      const body = await api.resetSetting(key);
+      qc.setQueryData(["settings"], body);
+      setBase(valuesOf(body.items));
+      setDraft(valuesOf(body.items));
+      void qc.invalidateQueries({ queryKey: ["config"] });
+      toast("Back to the default");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not reset");
+    }
+  }
+
   const discard = () => {
     setDraft(base);
     setErrors({});
@@ -211,7 +295,7 @@ export function SettingsPage() {
 
   return (
     <PageContainer className="py-7">
-      <BackLink href="/" label="Back to the composer" className="mb-4" />
+      <AppBack fallbackHref="/" fallbackLabel="Back to the composer" />
       <PageHead
         eyebrow="Settings"
         title="Settings"
@@ -224,7 +308,7 @@ export function SettingsPage() {
             </>
           ) : (
             <>
-              <span>{custom} changed</span>
+              <span>{custom} custom</span>
               <span aria-hidden="true">·</span>
               <span>{pinned} from the environment</span>
             </>
@@ -263,6 +347,7 @@ export function SettingsPage() {
                     onChange={(next) => set(item.key, next)}
                     error={errors[item.key]}
                     dirty={changed.includes(item.key)}
+                    onReset={() => void reset(item.key)}
                   />
                 ))}
               </section>

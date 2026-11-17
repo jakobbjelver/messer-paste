@@ -98,8 +98,8 @@ var Defs = []Def{
 	},
 	{
 		Key: "expiry_choices", Env: "EXPIRY_CHOICES", Group: "Behaviour",
-		Label: "Expiry presets", Description: "Which buttons appear, in order. 0 means never.",
-		Kind: KindList, Default: "1h,24h,7d,0",
+		Label: "Expiry presets", Description: "Tap the presets the composer should offer, in any order.",
+		Kind: KindList, Default: "1h,24h,7d,0", Choices: []string{"1h", "24h", "7d", "30d", "0"},
 	},
 	{
 		Key: "default_visibility", Env: "DEFAULT_VISIBILITY", Group: "Behaviour",

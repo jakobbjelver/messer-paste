@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { api, ApiError, type PasteDetail } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
-import { BackLink } from "@/components/ui/back-link";
+import { AppBack } from "@/components/back";
 import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
@@ -198,6 +198,15 @@ export function ComposerScreen({
     [],
   );
 
+  // Public links off means private, always: a draft left on "public" from an earlier session would
+  // otherwise keep the burn switch disabled and explain a rule about a feature that is not here.
+  useEffect(() => {
+    if (config && !config.public_links && draft.visibility !== "private") {
+      set({ visibility: "private" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.public_links]);
+
   // A fresh draft takes the deployment's defaults once: the expiry preset and whether it starts
   // private. It never overwrites something the person already chose.
   const seeded = useRef(false);
@@ -207,7 +216,6 @@ export function ComposerScreen({
     set({
       expiresIn: config.default_expiry,
       visibility: config.default_visibility,
-      maxViews: config.public_links ? 0 : 0,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, mode]);
@@ -221,7 +229,7 @@ export function ComposerScreen({
   return (
     <PageContainer className="py-7">
       {mode === "edit" && slug ? (
-        <BackLink href={`/${slug}`} label="Back to the paste" className="mb-4" />
+        <AppBack fallbackHref={`/${slug}`} fallbackLabel="Back to the paste" />
       ) : null}
       <PageHead
         eyebrow={mode === "edit" && slug ? `Editing · ${slug}` : "Draft"}

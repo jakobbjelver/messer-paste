@@ -192,7 +192,7 @@ export function PasteOptions({
             ))}
           </div>
 
-          {draft.visibility === "public" ? (
+          {draft.visibility === "public" && publicLinks ? (
             <>
               {/* A <div>, not a <label>: a label activates its first labelable descendant, which was the
                   Generate button — so a tap on the eye regenerated the password on iOS. */}
@@ -345,13 +345,13 @@ export function PasteOptions({
             <Switch
               data-field="burn"
               checked={draft.burn}
-              disabled={draft.visibility === "public" || !burnEnabled}
+              disabled={(publicLinks && draft.visibility === "public") || !burnEnabled}
               onCheckedChange={(burn) => set({ burn })}
               aria-label="Burn after reading"
             />
             One read, then gone
           </label>
-          {draft.visibility === "public" ? (
+          {draft.visibility === "public" && publicLinks ? (
             <p className="m-0 text-[11px] leading-snug text-[var(--text-3)]">
               A public paste has to expire, so burning is off. Switch to private to use it.
             </p>

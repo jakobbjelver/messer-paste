@@ -14,8 +14,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Paste" />
-    <!-- black-translucent draws under the notch, which the shell pads back with safe-area insets. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- `default` keeps iOS's own status bar out of the page. `black-translucent` draws the page under
+         it, and the frosted glass blurs whatever sits on the first row of the header. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="rgb(250 250 250)" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="rgb(10 10 10)" />
     <meta property="og:title" content="Messer Paste" />
@@ -24,7 +25,9 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     <script>
       // Before first paint: the family theme key, falling back to the OS.
       (function () {

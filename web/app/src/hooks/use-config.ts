@@ -21,9 +21,13 @@ export function useIsPublicHost(): boolean {
   return data.public_host.toLowerCase() === window.location.host.toLowerCase();
 }
 
-/** The link a share copies: the public host for a public paste, otherwise where the app runs. */
+/**
+ * The link a share copies: the public host for a public paste, otherwise where the app runs. When
+ * public links are off the host may still be configured, so it is the switch that decides, not the
+ * hostname: a copied link must never point at a reader that serves nothing.
+ */
 export function useShareBase(): string {
   const { data } = useConfig();
-  if (!data?.public_host) return window.location.origin;
+  if (!data?.public_links || !data.public_host) return window.location.origin;
   return `${window.location.protocol}//${data.public_host}`;
 }

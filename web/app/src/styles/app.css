@@ -179,10 +179,9 @@
    home indicator; the standalone display mode is where that padding belongs. */
 @media (display-mode: standalone) {
   body {
-    /* Not just the inset: the status bar sits a few pixels above the brand, and the home indicator
-       needs air under the sticky CTA or the last row of a card is under the gesture area. */
-    padding-top: calc(env(safe-area-inset-top) + 8px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
+    /* The status bar is iOS's own (the `default` style), so it already takes its space: padding for
+       it again is what pushed the header under the glass. Only the home indicator needs room. */
+    padding-bottom: calc(env(safe-area-inset-bottom) + 4px);
   }
 }
 body {

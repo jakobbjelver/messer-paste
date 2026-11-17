@@ -2,6 +2,8 @@ import { useState, type ComponentType } from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { GearSix, MagnifyingGlass, X } from "@phosphor-icons/react";
 
+import { useTrailRecorder } from "@/components/back";
+
 import { AppShell, type NavItem } from "@/components/ui/app-shell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { GlobalSearch } from "@/components/global-search";
@@ -43,6 +45,7 @@ export function Shell() {
   const live = useLiveEvents(!config.isPending && !isPublic);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [searchOpen, setSearchOpen] = useState(false);
+  useTrailRecorder();
   // The public host serves the same bundle but not the app: only a paste URL has anything to show.
   const publicReady = isPublic && /^\/[2-9A-HJKMNP-Z]{8}$/i.test(pathname);
   const showSearch = pathname !== "/ui" && !isPublic;

@@ -14,7 +14,7 @@ import {
 import { api, ApiError, type RevealPayload } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
-import { BackLink } from "@/components/ui/back-link";
+import { AppBack } from "@/components/back";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
@@ -98,7 +98,7 @@ export function PastePage() {
   if (notFound && !revealed) {
     return (
       <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
         <EmptyState
           title="Gone"
           description="This paste expired, burned, or was deleted."
@@ -118,7 +118,7 @@ export function PastePage() {
   if (burnRequired && !revealed) {
     return (
       <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
         <div className="mx-auto grid w-full max-w-[440px] gap-6">
           <div className="grid justify-items-center gap-1.5 text-center">
             <span className="m-label">{slug}</span>
@@ -154,7 +154,7 @@ export function PastePage() {
   if (query.data?.locked) {
     return (
       <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
         <div className="mx-auto grid w-full max-w-[440px] gap-6">
           <div className="grid justify-items-center gap-1.5 text-center">
             <span className="m-label">{slug}</span>
@@ -201,7 +201,7 @@ export function PastePage() {
   if (query.isLoading) {
     return (
       <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
         <div className="h-[240px] border border-[var(--border)] bg-[var(--surface-2)]" />
       </PageContainer>
     );
@@ -210,7 +210,7 @@ export function PastePage() {
   if (revealed) {
     return (
       <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
         <PageHead
           eyebrow={slug}
           title={revealed.title || "Untitled paste"}
@@ -277,7 +277,7 @@ export function PastePage() {
 
   return (
     <PageContainer className="py-7">
-        {isPublicHost ? null : <BackLink href="/recent" label="Back to recent" className="mb-4" />}
+        {isPublicHost ? null : <AppBack fallbackHref="/recent" fallbackLabel="Back to recent" />}
       <PageHead
         eyebrow={paste.slug}
         title={paste.title || "Untitled paste"}
