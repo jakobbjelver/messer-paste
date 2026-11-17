@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -88,16 +89,24 @@ type Store interface {
 type Service struct {
 	store  Store
 	tree   *Storage
-	limits Limits
+	limits atomic.Pointer[Limits]
 	events Publisher
 	log    *slog.Logger
 }
+
+// SetLimits swaps the parser's limits. A settings write calls it; every request reads the current
+// pointer once, so a paste is parsed entirely under one set of limits.
+func (s *Service) SetLimits(l Limits) { s.limits.Store(&l) }
+
+func (s *Service) limit() Limits { return *s.limits.Load() }
 
 func NewService(store Store, tree *Storage, limits Limits, events Publisher, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{store: store, tree: tree, limits: limits, events: events, log: log}
+	svc := &Service{store: store, tree: tree, events: events, log: log}
+	svc.limits.Store(&limits)
+	return svc
 }
 
 func (s *Service) Tree() *Storage { return s.tree }
@@ -351,17 +360,17 @@ func (s *Service) Unlock(ctx context.Context, slug, password string) error {
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 	text := in.Text
-	if int64(len(text)) > s.limits.Text {
+	if int64(len(text)) > s.limit().Text {
 		return nil, ErrTextTooBig
 	}
 	total := int64(len(text))
 	for _, file := range in.Files {
 		total += file.Size
 	}
-	if total > s.limits.Paste {
+	if total > s.limit().Paste {
 		return nil, ErrTooLarge
 	}
-	if in.Burn && total > s.limits.Burn {
+	if in.Burn && total > s.limit().Burn {
 		return nil, ErrTooLarge
 	}
 
@@ -439,7 +448,7 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 		return nil, err
 	}
 	text := in.Text
-	if int64(len(text)) > s.limits.Text {
+	if int64(len(text)) > s.limit().Text {
 		return nil, ErrTextTooBig
 	}
 
@@ -461,10 +470,10 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	for _, file := range in.Files {
 		total += file.Size
 	}
-	if total > s.limits.Paste {
+	if total > s.limit().Paste {
 		return nil, ErrTooLarge
 	}
-	if in.Burn && total > s.limits.Burn {
+	if in.Burn && total > s.limit().Burn {
 		return nil, ErrTooLarge
 	}
 
@@ -676,7 +685,7 @@ func (s *Service) planFiles(in []Incoming, kept []File) ([]File, error) {
 	out := make([]File, 0, len(in))
 	start := len(kept)
 	for index, file := range in {
-		if file.Size > s.limits.File {
+		if file.Size > s.limit().File {
 			return nil, ErrTooLarge
 		}
 		name := SafeName(file.Name)

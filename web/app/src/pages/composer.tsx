@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FloppyDisk, Paperclip, Plus, UploadSimple } from "@phosphor-icons/react";
+import { FloppyDisk, Lock, Paperclip, Plus, UploadSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { api, ApiError, type PasteDetail } from "@/api";
@@ -13,7 +13,7 @@ import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
-import { useShareBase } from "@/hooks/use-config";
+import { useConfig, useShareBase } from "@/hooks/use-config";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
 import { previewTitle } from "@/lib/title";
 import { validateDraft, type FieldError } from "@/lib/validation";
@@ -35,6 +35,7 @@ export function ComposerScreen({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const shareBase = useShareBase();
+  const { data: config } = useConfig();
   const { draft, set, addFiles, removeFile, reset, load, counts } = useDraft();
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
@@ -196,6 +197,20 @@ export function ComposerScreen({
     [],
   );
 
+  // A fresh draft takes the deployment's defaults once: the expiry preset and whether it starts
+  // private. It never overwrites something the person already chose.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !config || mode === "edit") return;
+    seeded.current = true;
+    set({
+      expiresIn: config.default_expiry,
+      visibility: config.default_visibility,
+      maxViews: config.public_links ? 0 : 0,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, mode]);
+
   const onFiles = (files: File[]) => {
     if (files.length === 0) return;
     addFiles(files);
@@ -269,6 +284,13 @@ export function ComposerScreen({
           </>
         }
       />
+
+      {config?.read_only ? (
+        <div className="mb-4 flex items-start gap-2 border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-[12.5px] leading-snug text-[var(--text-2)]">
+          <Lock size={14} aria-hidden="true" className="mt-px shrink-0 text-[var(--text-3)]" />
+          Writes are frozen: this archive is read-only until the owner lifts it in settings.
+        </div>
+      ) : null}
 
       <div
         onDragEnter={(event) => {
@@ -373,6 +395,14 @@ export function ComposerScreen({
           }}
           locked={initial?.locked}
           errors={fieldErrors}
+          expiryChoices={(config?.expiry_choices ?? []).map((choice) => ({
+            value: choice.seconds,
+            label: choice.seconds === 0 ? null : choice.label,
+          }))}
+          publicLinks={config?.public_links ?? false}
+          burnEnabled={config?.burn_enabled ?? true}
+          passwordRequired={config?.password_required ?? false}
+          readOnly={config?.read_only ?? false}
         />
 
         {dragging ? (

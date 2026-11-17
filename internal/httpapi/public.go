@@ -22,7 +22,7 @@ import (
 const unlockCookie = "mp_unlock"
 
 func (s *Server) isPublicHost(r *http.Request) bool {
-	want := strings.TrimSpace(s.cfg.PublicHost)
+	want := strings.TrimSpace(s.conf().PublicHost)
 	if want == "" {
 		return false
 	}
@@ -41,7 +41,7 @@ func (s *Server) unlocked(r *http.Request, slug string) bool {
 	if err != nil || cookie.Value == "" {
 		return false
 	}
-	return paste.VerifyUnlock(s.cfg.Secret, cookie.Value, slug, time.Now().Unix())
+	return paste.VerifyUnlock(s.conf().Secret, cookie.Value, slug, time.Now().Unix())
 }
 
 func (s *Server) publicRouter() http.Handler {
@@ -71,9 +71,35 @@ func (s *Server) publicRouter() http.Handler {
 // config tells the SPA which host is which. The same bundle is served from both, so this is the only
 // way the client can know it is the public reader and not the app.
 func (s *Server) config(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]string{
-		"public_host": s.cfg.PublicHost,
+	cfg := s.conf()
+	visibility := "private"
+	if cfg.DefaultPublic {
+		visibility = "public"
+	}
+	choices := make([]map[string]any, 0, len(cfg.ExpiryChoices))
+	for _, c := range cfg.ExpiryChoices {
+		choices = append(choices, map[string]any{"seconds": c.Seconds, "label": c.Label})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"public_links":       cfg.PublicLinks,
+		"public_host":        cfg.PublicHost,
+		"share_base":         cfg.ShareBase,
+		"read_only":          cfg.ReadOnly,
+		"burn_enabled":       cfg.BurnEnabled,
+		"copy_on_create":     cfg.CopyOnCreate,
+		"password_required":  cfg.PasswordRequired,
+		"default_expiry":     int64(cfg.DefaultExpiry.Seconds()),
+		"default_visibility": visibility,
+		"expiry_choices":     choices,
+		"recent_page_size":   cfg.RecentPageSize,
+		"search_min_chars":   cfg.SearchMinChars,
+		"limits": map[string]int64{
+			"text":  cfg.MaxText,
+			"file":  cfg.MaxFile,
+			"paste": cfg.MaxPaste,
+			"burn":  cfg.MaxBurn,
+			"files": cfg.MaxFiles,
+		},
 	})
 }
 
@@ -113,10 +139,14 @@ func (s *Server) publicUnlock(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	expires := time.Now().Add(time.Hour)
+	ttl := s.conf().UnlockTTL
+	if ttl <= 0 {
+		ttl = time.Hour
+	}
+	expires := time.Now().Add(ttl)
 	http.SetCookie(w, &http.Cookie{
 		Name:     unlockCookie,
-		Value:    paste.SignUnlock(s.cfg.Secret, slug, expires.Unix()),
+		Value:    paste.SignUnlock(s.conf().Secret, slug, expires.Unix()),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"),
@@ -178,7 +208,24 @@ func newLimiter(perMinute int) *limiter {
 	return &limiter{rate: perMinute, until: make(map[string]entry, 256)}
 }
 
+// reset re-arms the limiter with a new rate. A zero rate disables it, which is why the caller keeps
+// the pointer: a limiter that exists but allows everything is simpler than a nil check at each use.
+func (l *limiter) reset(perMinute int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if perMinute <= 0 {
+		l.rate = 0
+		l.until = map[string]entry{}
+		return
+	}
+	l.rate = perMinute
+	l.until = map[string]entry{}
+}
+
 func (l *limiter) allow(key string) bool {
+	if l == nil {
+		return true
+	}
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()

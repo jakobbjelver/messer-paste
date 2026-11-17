@@ -46,17 +46,34 @@ that serves read-only links; that host gets a router of its own and answers only
 `/raw`, `/files/{id}`, `POST /unlock`, `/config` and `/healthz`. Everything else is a 404, including
 the archive.
 
+Every value has two doors: an environment variable, and **Settings** in the app (the gear beside the
+theme toggle). The environment wins and pins the key — the page shows the variable's name and refuses
+the write — but a stored value is kept underneath, so removing the variable restores what you set
+there instead of snapping to the default.
+
 | Variable | Default | |
 |---|---|---|
-| `PORT` | `:8080` | listen address |
-| `DATA_DIR` | `/data` | SQLite database, its WAL and the unlock key |
-| `PASTE_ROOT` | `/pastes` | one directory per paste |
-| `PUBLIC_HOST` | empty | hostname of the read-only host; unset disables public links |
-| `PASTE_SECRET` | generated | signs the unlock cookie; a `0600` file is created if unset |
+| `PORT` | `:8080` | listen address — boot only |
+| `DATA_DIR` | `/data` | SQLite, its WAL and the unlock key — boot only |
+| `PASTE_ROOT` | `/pastes` | one directory per paste — boot only |
+| `PASTE_SECRET` | generated | signs the unlock cookie; a `0600` file is created if unset — boot only |
+| `PUBLIC_LINKS` | `false` | the public host and the visibility choice, as one switch |
+| `PUBLIC_HOST` | empty | the read-only hostname; setting it alone still turns public links on |
+| `PUBLIC_PASSWORD_REQUIRED` | `false` | refuse a public paste without a password |
 | `MAX_TEXT_BYTES` | `2097152` | text body cap |
 | `MAX_FILE_BYTES` | `104857600` | one file |
 | `MAX_PASTE_BYTES` | `262144000` | everything a paste holds |
 | `MAX_BURN_BYTES` | `10485760` | a burn paste, because the reveal returns it inline |
+| `MAX_FILES` | `20` | attachments per paste |
+| `DEFAULT_EXPIRY` | `24h` | what the composer starts on |
+| `EXPIRY_CHOICES` | `1h,24h,7d,0` | the presets, in order |
+| `BURN_ENABLED` | `true` | allow burn pastes at all |
+| `READ_ONLY` | `false` | freeze writes (`409 E_READ_ONLY`); settings stay writable |
+| `PURGE_AFTER` | `0` | delete pastes older than this, every sweep |
+| `UNLOCK_TTL` | `168h` | how long a correct password is remembered |
+| `LOG_LEVEL` | `info` | debug, info, warn, error |
+
+`GET /api/v1/settings` lists every key with its value, its default, and which layer set it.
 
 ## Build from source
 

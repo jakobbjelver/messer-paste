@@ -76,6 +76,11 @@ export function PasteOptions({
   onClearFiles,
   locked,
   errors = [],
+  expiryChoices = EXPIRY,
+  publicLinks = false,
+  burnEnabled = true,
+  passwordRequired = false,
+  readOnly = false,
 }: {
   draft: DraftState;
   set: (patch: Partial<DraftState>) => void;
@@ -88,6 +93,11 @@ export function PasteOptions({
   /** The stored paste has a password. Only the owner sees this, and never the password itself. */
   locked?: boolean;
   errors?: FieldError[];
+  expiryChoices?: { value: number; label: string | null }[];
+  publicLinks?: boolean;
+  burnEnabled?: boolean;
+  passwordRequired?: boolean;
+  readOnly?: boolean;
 }) {
   const [reveal, setReveal] = useState(false);
   const fileBytes = draft.files.reduce((total, file) => total + file.size, 0);
@@ -151,6 +161,7 @@ export function PasteOptions({
           </span>
         </Section>
 
+        {publicLinks ? (
         <Section
           label="Visibility"
           tip="Private is only reachable through your own access layer. Public is readable by anyone with the link, on the public host: it must expire, and it cannot burn."
@@ -211,7 +222,11 @@ export function PasteOptions({
                     autoComplete="new-password"
                     aria-invalid={errorFor("password") ? true : undefined}
                     placeholder={
-                      locked ? "Set a new one, or keep the current" : "Optional · 8+ characters"
+                      locked
+                        ? "Set a new one, or keep the current"
+                        : passwordRequired
+                          ? "Required · 8+ characters"
+                          : "Optional · 8+ characters"
                     }
                     onChange={(event) =>
                       set({ password: event.target.value, clearPassword: false })
@@ -284,10 +299,14 @@ export function PasteOptions({
             </>
           ) : null}
         </Section>
+        ) : null}
 
         <Section label="Expires" error={errorFor("expiry")}>
-          <div className="grid grid-cols-4 border border-[var(--border-strong)]">
-            {EXPIRY.map((option) => (
+          <div
+            className="grid border border-[var(--border-strong)]"
+            style={{ gridTemplateColumns: `repeat(${Math.max(1, expiryChoices.length)}, minmax(0, 1fr))` }}
+          >
+            {expiryChoices.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -326,7 +345,7 @@ export function PasteOptions({
             <Switch
               data-field="burn"
               checked={draft.burn}
-              disabled={draft.visibility === "public"}
+              disabled={draft.visibility === "public" || !burnEnabled}
               onCheckedChange={(burn) => set({ burn })}
               aria-label="Burn after reading"
             />
@@ -336,6 +355,10 @@ export function PasteOptions({
             <p className="m-0 text-[11px] leading-snug text-[var(--text-3)]">
               A public paste has to expire, so burning is off. Switch to private to use it.
             </p>
+          ) : !burnEnabled ? (
+            <p className="m-0 text-[11px] leading-snug text-[var(--text-3)]">
+              Burn after reading is off in this deployment.
+            </p>
           ) : null}
         </Section>
       </div>
@@ -344,7 +367,7 @@ export function PasteOptions({
         <button
           type="button"
           id="commit"
-          disabled={pending || (!draft.text.trim() && draft.files.length === 0)}
+          disabled={readOnly || pending || (!draft.text.trim() && draft.files.length === 0)}
           onClick={onSubmit}
           className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 bg-[var(--primary)] px-2.5 sm:justify-start text-sm font-medium text-[var(--primary-foreground)] transition-colors duration-150 hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:border disabled:border-[var(--border-strong)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-3)]"
         >
@@ -353,7 +376,7 @@ export function PasteOptions({
               {ctaIcon}
             </span>
           ) : null}
-          <span className="truncate">{pending ? "Saving…" : ctaLabel}</span>
+          <span className="truncate">{readOnly ? "Frozen" : pending ? "Saving…" : ctaLabel}</span>
           {!pending ? (
             <span className="ml-auto hidden shrink-0 items-center gap-1 sm:flex" aria-hidden="true">
               <kbd className="m-kbd m-kbd--tight m-kbd--inherit">{modKey()}</kbd>

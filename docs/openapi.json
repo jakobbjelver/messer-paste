@@ -594,6 +594,354 @@
           }
         }
       }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "summary": "Every setting, its value, and the layer that set it",
+        "responses": {
+          "200": {
+            "description": "The catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "env": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "int",
+                              "bool",
+                              "enum",
+                              "duration",
+                              "text",
+                              "list"
+                            ]
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "default": {},
+                          "min": {
+                            "type": "integer"
+                          },
+                          "max": {
+                            "type": "integer"
+                          },
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "boot": {
+                            "type": "boolean"
+                          },
+                          "advanced": {
+                            "type": "boolean"
+                          },
+                          "value": {},
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "env",
+                              "custom"
+                            ]
+                          },
+                          "editable": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "custom": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Write settings",
+        "description": "Validates the whole body before writing anything. A key the environment owns answers 409 E_PINNED; a boot-only key answers 409 too.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The catalog after the write",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "env": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "int",
+                              "bool",
+                              "enum",
+                              "duration",
+                              "text",
+                              "list"
+                            ]
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "default": {},
+                          "min": {
+                            "type": "integer"
+                          },
+                          "max": {
+                            "type": "integer"
+                          },
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "boot": {
+                            "type": "boolean"
+                          },
+                          "advanced": {
+                            "type": "boolean"
+                          },
+                          "value": {},
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "env",
+                              "custom"
+                            ]
+                          },
+                          "editable": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "custom": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "E_UNKNOWN_SETTING",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "E_PINNED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "E_INVALID, with the field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/{key}": {
+      "delete": {
+        "summary": "Drop a stored value so the default takes over",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The catalog after the reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "env": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "int",
+                              "bool",
+                              "enum",
+                              "duration",
+                              "text",
+                              "list"
+                            ]
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "default": {},
+                          "min": {
+                            "type": "integer"
+                          },
+                          "max": {
+                            "type": "integer"
+                          },
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "boot": {
+                            "type": "boolean"
+                          },
+                          "advanced": {
+                            "type": "boolean"
+                          },
+                          "value": {},
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "env",
+                              "custom"
+                            ]
+                          },
+                          "editable": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "custom": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "E_PINNED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

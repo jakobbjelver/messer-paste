@@ -20,7 +20,7 @@ import (
 
 func (s *Server) listPastes(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
-	limit := 50
+	limit := s.conf().RecentPageSize
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		if value, err := strconv.Atoi(raw); err == nil {
 			limit = value
@@ -73,6 +73,11 @@ func (s *Server) createPaste(w http.ResponseWriter, r *http.Request) {
 		Burn:       fields["burn"] == "1",
 		Files:      files,
 	}
+	if cap, ok := s.policy(w, in.Visibility, in.Burn, in.Password, in.MaxViews, len(files)); !ok {
+		return
+	} else {
+		in.MaxViews = cap
+	}
 	p, err := s.svc.Create(r.Context(), in)
 	if err != nil {
 		s.fail(w, r, err)
@@ -112,6 +117,11 @@ func (s *Server) updatePaste(w http.ResponseWriter, r *http.Request) {
 		if raw != "" {
 			in.Keep = append(in.Keep, raw)
 		}
+	}
+	if cap, ok := s.policy(w, in.Visibility, in.Burn, in.Password, in.MaxViews, len(files)); !ok {
+		return
+	} else {
+		in.MaxViews = cap
 	}
 	p, err := s.svc.Update(r.Context(), slug, in)
 	if err != nil {
@@ -200,7 +210,7 @@ func (s *Server) revealPaste(w http.ResponseWriter, r *http.Request) {
 // small), files are never held in memory.
 func (s *Server) parse(w http.ResponseWriter, r *http.Request) (map[string]string, []paste.Incoming, func(), error) {
 	noop := func() {}
-	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxPaste+(1<<20))
+	r.Body = http.MaxBytesReader(w, r.Body, s.conf().MaxPaste+(1<<20))
 
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -227,7 +237,7 @@ func (s *Server) parse(w http.ResponseWriter, r *http.Request) (map[string]strin
 		}
 
 		if part.FileName() == "" {
-			raw, err := io.ReadAll(io.LimitReader(part, s.cfg.MaxText+1))
+			raw, err := io.ReadAll(io.LimitReader(part, s.conf().MaxText+1))
 			part.Close()
 			if err != nil {
 				cleanup()
@@ -250,19 +260,19 @@ func (s *Server) parse(w http.ResponseWriter, r *http.Request) (map[string]strin
 			cleanup()
 			return nil, nil, noop, err
 		}
-		size, err := io.Copy(out, io.LimitReader(part, s.cfg.MaxFile+1))
+		size, err := io.Copy(out, io.LimitReader(part, s.conf().MaxFile+1))
 		out.Close()
 		part.Close()
 		if err != nil {
 			cleanup()
 			return nil, nil, noop, mapLimit(err)
 		}
-		if size > s.cfg.MaxFile {
+		if size > s.conf().MaxFile {
 			cleanup()
 			return nil, nil, noop, paste.ErrTooLarge
 		}
 		total += size
-		if total > s.cfg.MaxPaste {
+		if total > s.conf().MaxPaste {
 			cleanup()
 			return nil, nil, noop, paste.ErrTooLarge
 		}
@@ -273,7 +283,7 @@ func (s *Server) parse(w http.ResponseWriter, r *http.Request) (map[string]strin
 		files = append(files, paste.Incoming{Name: name, Mime: mimeType, TempPath: dst, Size: size})
 	}
 
-	if len(fields["text"]) > int(s.cfg.MaxText) {
+	if len(fields["text"]) > int(s.conf().MaxText) {
 		cleanup()
 		return nil, nil, noop, paste.ErrTextTooBig
 	}

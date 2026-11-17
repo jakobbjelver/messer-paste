@@ -5,6 +5,7 @@ import { ComposerPage } from "./pages/composer";
 import { RecentPage } from "./pages/recent";
 import { PastePage } from "./pages/paste";
 import { EditPage } from "./pages/edit";
+import { SettingsPage } from "./pages/settings";
 import { SinkPage } from "./pages/sink";
 import { NotFoundPage } from "./pages/not-found";
 
@@ -39,6 +40,12 @@ const editRoute = createRoute({
   component: EditPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
 const sinkRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/ui",
@@ -48,6 +55,7 @@ const sinkRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   recentRoute,
+  settingsRoute,
   sinkRoute,
   pasteRoute,
   editRoute,

@@ -23,10 +23,8 @@ const api = "/api/v1"
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	base := t.TempDir()
-	cfg := config.Config{
-		DataDir: base + "/data", PasteRoot: base + "/pastes", Listen: ":0",
-		MaxText: 2 << 20, MaxFile: 1 << 20, MaxPaste: 4 << 20, MaxBurn: 1 << 20,
-	}
+	cfg := config.Default()
+	cfg.DataDir, cfg.PasteRoot, cfg.Listen = base+"/data", base+"/pastes", ":0"
 	st, err := store.Open(cfg.DataDir + "/state.db")
 	if err != nil {
 		t.Fatal(err)

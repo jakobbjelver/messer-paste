@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +24,7 @@ import (
 var errBadRequest = errors.New("bad_request")
 
 type Server struct {
-	cfg     config.Config
+	cfg     atomic.Pointer[config.Config]
 	svc     *paste.Service
 	store   *store.Store
 	tree    *paste.Storage
@@ -35,17 +36,40 @@ type Server struct {
 
 	publicLimitRL *limiter
 	unlockLimit   *limiter
+
+	// OnConfig runs after a new snapshot is in force, so main can rebuild what it implies: the
+	// service's parser limits, the sweeper's retention, the logger's level.
+	OnConfig func(config.Config)
 }
 
 func New(cfg config.Config, svc *paste.Service, st *store.Store, tree *paste.Storage, hub *Hub, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{
-		cfg: cfg, svc: svc, store: st, tree: tree, hub: hub, log: log,
+	s := &Server{
+		svc: svc, store: st, tree: tree, hub: hub, log: log,
 		Version: "dev", Commit: "dev", Built: "unknown",
 		publicLimitRL: newLimiter(cfg.PublicRate),
 		unlockLimit:   newLimiter(cfg.UnlockRate),
+	}
+	s.cfg.Store(&cfg)
+	return s
+}
+
+// conf is the snapshot in force for this request. Every handler reads it once: a settings write
+// swaps the pointer, so a request never sees half of two configurations.
+func (s *Server) conf() config.Config { return *s.cfg.Load() }
+
+// Config is the snapshot in force, for the pieces of main that must follow a settings write.
+func (s *Server) Config() config.Config { return s.conf() }
+
+// SetConfig installs a new snapshot and tells whoever needs to re-derive state from it.
+func (s *Server) SetConfig(cfg config.Config) {
+	s.cfg.Store(&cfg)
+	s.publicLimitRL.reset(cfg.PublicRate)
+	s.unlockLimit.reset(cfg.UnlockRate)
+	if s.OnConfig != nil {
+		s.OnConfig(cfg)
 	}
 }
 
@@ -55,19 +79,25 @@ func (s *Server) Handler() http.Handler {
 	r.Use(s.requestLog)
 
 	// One binary, two products. The host decides which, before any route is matched, so the two
-	// route sets never share a lookup table.
-	if s.cfg.PublicHost != "" {
-		public := s.publicRouter()
-		r.Use(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if s.isPublicHost(r) {
-					public.ServeHTTP(w, r)
-					return
-				}
+	// route sets never share a lookup table. Both the feature switch and the host are read live: the
+	// public router can be switched on from the settings page without a restart.
+	public := s.publicRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cfg := s.conf()
+			if !cfg.PublicLinks || cfg.PublicHost == "" {
 				next.ServeHTTP(w, r)
-			})
+				return
+			}
+			if s.isPublicHost(r) {
+				public.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
-	}
+	})
+
+	r.Use(s.readOnlyGuard)
 
 	r.Get("/healthz", s.health)
 	r.Get("/readyz", s.ready)
@@ -82,6 +112,9 @@ func (s *Server) Handler() http.Handler {
 		api.Delete("/pastes", s.purgePastes)
 		api.Get("/events", s.events)
 		api.Get("/config", s.config)
+		api.Get("/settings", s.getSettings)
+		api.Patch("/settings", s.patchSettings)
+		api.Delete("/settings/{key}", s.resetSetting)
 		api.Get("/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.Header().Set("Cache-Control", "public, max-age=300")
@@ -174,6 +207,9 @@ var messages = map[string]string{
 	"E_TEXT_TOO_LARGE":      "The text is larger than the paste limit.",
 	"E_CONTENT_UNAVAILABLE": "The content volume is not available.",
 	"E_INVALID":             "That request is not valid.",
+	"E_DISABLED":            "That feature is off in this deployment.",
+	"E_READ_ONLY":           "This paste is frozen.",
+	"E_PINNED":              "That setting comes from the environment.",
 	"E_INTERNAL":            "Something went wrong.",
 }
 

@@ -27,7 +27,7 @@ export type DraftState = {
   files: DraftFile[];
 };
 
-const EMPTY: DraftState = {
+export const EMPTY: DraftState = {
   title: "",
   text: "",
   language: "auto",

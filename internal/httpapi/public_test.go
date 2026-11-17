@@ -22,12 +22,11 @@ const publicHost = "pub.test"
 func newPublicServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	base := t.TempDir()
-	cfg := config.Config{
-		DataDir: base + "/data", PasteRoot: base + "/pastes", Listen: ":0",
-		MaxText: 2 << 20, MaxFile: 1 << 20, MaxPaste: 4 << 20, MaxBurn: 1 << 20,
-		PublicHost: publicHost, Secret: "test-secret-that-is-long-enough-32",
-		PublicRate: 1000, UnlockRate: 1000,
-	}
+	cfg := config.Default()
+	cfg.DataDir, cfg.PasteRoot, cfg.Listen = base+"/data", base+"/pastes", ":0"
+	cfg.PublicHost, cfg.PublicLinks = publicHost, true
+	cfg.Secret = "test-secret-that-is-long-enough-32"
+	cfg.PublicRate, cfg.UnlockRate = 1000, 1000
 	st, err := store.Open(cfg.DataDir + "/state.db")
 	if err != nil {
 		t.Fatal(err)
@@ -266,12 +265,11 @@ func TestPublicConfigAndExpiry(t *testing.T) {
 
 func TestPublicRateLimit(t *testing.T) {
 	base := t.TempDir()
-	cfg := config.Config{
-		DataDir: base + "/data", PasteRoot: base + "/pastes", Listen: ":0",
-		MaxText: 2 << 20, MaxFile: 1 << 20, MaxPaste: 4 << 20, MaxBurn: 1 << 20,
-		PublicHost: publicHost, Secret: "test-secret-that-is-long-enough-32",
-		PublicRate: 3, UnlockRate: 1000,
-	}
+	cfg := config.Default()
+	cfg.DataDir, cfg.PasteRoot, cfg.Listen = base+"/data", base+"/pastes", ":0"
+	cfg.PublicHost, cfg.PublicLinks = publicHost, true
+	cfg.Secret = "test-secret-that-is-long-enough-32"
+	cfg.PublicRate, cfg.UnlockRate = 3, 1000
 	st, err := store.Open(cfg.DataDir + "/state.db")
 	if err != nil {
 		t.Fatal(err)

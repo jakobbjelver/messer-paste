@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS public_views (
   PRIMARY KEY (slug, bucket, ip)
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS idempotency (
   key      TEXT PRIMARY KEY,
   body     BLOB NOT NULL,

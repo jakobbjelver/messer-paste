@@ -17,6 +17,7 @@ import (
 	"github.com/jakobbjelver/messer-paste/internal/config"
 	"github.com/jakobbjelver/messer-paste/internal/httpapi"
 	"github.com/jakobbjelver/messer-paste/internal/paste"
+	"github.com/jakobbjelver/messer-paste/internal/settings"
 	"github.com/jakobbjelver/messer-paste/internal/store"
 )
 
@@ -32,24 +33,47 @@ func main() {
 		mode = os.Args[1]
 	}
 
-	cfg := config.Load()
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// The paths have to come from the environment before the database can be opened; everything else
+	// is resolved after, so a value saved from the settings page survives a restart.
+	boot := config.Load()
+	level := new(slog.LevelVar)
+	level.Set(slog.LevelInfo)
+	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
+	secret := boot.Secret
 	var err error
-	if cfg.Secret == "" {
-		cfg.Secret, err = loadSecret(filepath.Join(cfg.DataDir, "unlock.key"))
+	if secret == "" {
+		secret, err = loadSecret(filepath.Join(boot.DataDir, "unlock.key"))
 		if err != nil {
 			log.Error("unlock secret", "err", err)
 			os.Exit(1)
 		}
 	}
 
-	st, err := store.Open(filepath.Join(cfg.DataDir, "state.db"))
+	st, err := store.Open(filepath.Join(boot.DataDir, "state.db"))
 	if err != nil {
 		log.Error("open database", "err", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	stored, err := st.LoadSettings(ctx)
+	if err != nil {
+		log.Warn("read settings", "err", err)
+	}
+	values, err := settings.Resolve(os.LookupEnv, stored)
+	if err != nil {
+		// One unparseable variable must not stop the archive from opening: fall back to the
+		// environment-free resolution and let doctor name the culprit.
+		log.Error("settings", "err", err)
+		values, _ = settings.Resolve(func(string) (string, bool) { return "", false }, stored)
+	}
+	cfg := config.FromValues(values)
+	cfg.Secret = secret
+	log.Info("settings", "custom", customCount(values), "fromEnv", envCount(values))
 
 	tree, err := paste.NewStorage(cfg.PasteRoot)
 	if err != nil {
@@ -62,15 +86,7 @@ func main() {
 	}
 
 	hub := httpapi.NewHub()
-	svc := paste.NewService(st, tree, paste.Limits{
-		Text:  cfg.MaxText,
-		File:  cfg.MaxFile,
-		Paste: cfg.MaxPaste,
-		Burn:  cfg.MaxBurn,
-	}, hub, log)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	svc := paste.NewService(st, tree, limitsOf(cfg), hub, log)
 
 	if indexed, err := svc.BackfillSearch(ctx); err != nil {
 		log.Warn("search backfill failed", "err", err)
@@ -84,6 +100,14 @@ func main() {
 		log.Info("reconciled", "orphanDirs", result.OrphanDirs, "missingDirs", result.MissingDirs)
 	}
 
+	server := httpapi.New(cfg, svc, st, tree, hub, log)
+	server.Version, server.Commit, server.Built = version, commit, built
+	// A settings write swaps the snapshot; the things that cache what it implies are rebuilt here.
+	server.OnConfig = func(next config.Config) {
+		svc.SetLimits(limitsOf(next))
+		level.Set(levelOf(next.LogLevel))
+	}
+
 	go func() {
 		ticker := time.NewTicker(cfg.ExpiryTick)
 		defer ticker.Stop()
@@ -93,12 +117,22 @@ func main() {
 				return
 			case <-ticker.C:
 				svc.Sweep(ctx, time.Now().Unix())
+				if after := server.Config().PurgeAfter; after > 0 {
+					slugs, err := st.PurgeOlderThan(ctx, time.Now().Add(-after).Unix())
+					if err != nil {
+						log.Warn("retention", "err", err)
+					}
+					for _, slug := range slugs {
+						_ = tree.Remove(slug)
+						hub.Publish(paste.Event{Type: "paste.deleted", Slug: slug})
+					}
+					if len(slugs) > 0 {
+						log.Info("retention", "deleted", len(slugs))
+					}
+				}
 			}
 		}
 	}()
-
-	server := httpapi.New(cfg, svc, st, tree, hub, log)
-	server.Version, server.Commit, server.Built = version, commit, built
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,
@@ -122,6 +156,42 @@ func main() {
 	if err := httpServer.Shutdown(shutdown); err != nil {
 		log.Warn("shutdown", "err", err)
 	}
+}
+
+func limitsOf(cfg config.Config) paste.Limits {
+	return paste.Limits{Text: cfg.MaxText, File: cfg.MaxFile, Paste: cfg.MaxPaste, Burn: cfg.MaxBurn}
+}
+
+func levelOf(name string) slog.Level {
+	switch name {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	}
+	return slog.LevelInfo
+}
+
+func customCount(values map[string]settings.Value) int {
+	n := 0
+	for _, v := range values {
+		if v.Source == settings.FromCustom {
+			n++
+		}
+	}
+	return n
+}
+
+func envCount(values map[string]settings.Value) int {
+	n := 0
+	for _, v := range values {
+		if v.Source == settings.FromEnv {
+			n++
+		}
+	}
+	return n
 }
 
 // loadSecret keeps the unlock cookie valid across restarts without asking the operator for one: a

@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { MagnifyingGlass, X } from "@phosphor-icons/react";
+import { GearSix, MagnifyingGlass, X } from "@phosphor-icons/react";
 
 import { AppShell, type NavItem } from "@/components/ui/app-shell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -73,6 +73,20 @@ export function Shell() {
                   </button>
                 </>
               ) : null}
+              {isPublic ? null : (
+                <Link
+                  to="/settings"
+                  aria-label="Settings"
+                  aria-current={pathname === "/settings" ? "page" : undefined}
+                  className={`grid size-8 place-items-center ${
+                    pathname === "/settings"
+                      ? "text-[var(--foreground)]"
+                      : "text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <GearSix size={16} aria-hidden="true" />
+                </Link>
+              )}
               <ThemeToggle dark={dark} onToggle={toggle} />
             </>
           }

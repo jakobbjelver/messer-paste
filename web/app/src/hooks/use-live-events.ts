@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 
 export type LiveEvent = {
-  type: "paste.created" | "paste.updated" | "paste.deleted" | "paste.purged";
+  type: "paste.created" | "paste.updated" | "paste.deleted" | "paste.purged" | "settings";
   slug?: string;
   at: number;
 };
@@ -40,6 +40,7 @@ export function useLiveEvents(allow = true): LiveState {
       "paste.updated",
       "paste.deleted",
       "paste.purged",
+      "settings",
     ];
     const handlers = types.map((type) => {
       const handler = (event: MessageEvent) => {

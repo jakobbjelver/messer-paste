@@ -173,7 +173,16 @@ export const api = {
   purge: () => request<{ deleted: number }>("/api/v1/pastes", { method: "DELETE" }),
   reveal: (slug: string) =>
     request<RevealPayload>(`/api/v1/pastes/${slug}/reveal`, { method: "POST" }),
-  config: () => request<{ public_host: string }>("/api/v1/config"),
+  config: () => request<AppConfig>("/api/v1/config"),
+  settings: () => request<SettingsBody>("/api/v1/settings"),
+  saveSettings: (patch: Record<string, unknown>) =>
+    request<SettingsBody>("/api/v1/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
+  resetSetting: (key: string) =>
+    request<SettingsBody>(`/api/v1/settings/${key}`, { method: "DELETE" }),
   unlock: (slug: string, password: string) =>
     request<void>(`/api/v1/pastes/${slug}/unlock`, {
       method: "POST",
@@ -184,3 +193,45 @@ export const api = {
   fileUrl: (slug: string, id: string, download = false) =>
     `/api/v1/pastes/${slug}/files/${id}${download ? "?download=1" : ""}`,
 };
+
+export type ExpiryChoice = { seconds: number; label: string };
+
+export type AppConfig = {
+  public_links: boolean;
+  public_host: string;
+  share_base: string;
+  read_only: boolean;
+  burn_enabled: boolean;
+  copy_on_create: boolean;
+  password_required: boolean;
+  default_expiry: number;
+  default_visibility: "private" | "public";
+  expiry_choices: ExpiryChoice[];
+  recent_page_size: number;
+  search_min_chars: number;
+  limits: { text: number; file: number; paste: number; burn: number; files: number };
+};
+
+export type SettingKind = "int" | "bool" | "enum" | "duration" | "text" | "list";
+export type SettingSource = "default" | "env" | "custom";
+
+export type Setting = {
+  key: string;
+  env: string;
+  group: string;
+  label: string;
+  description: string;
+  kind: SettingKind;
+  unit?: string;
+  default: unknown;
+  min?: number;
+  max?: number;
+  choices?: string[];
+  boot: boolean;
+  advanced?: boolean;
+  value: unknown;
+  source: SettingSource;
+  editable: boolean;
+};
+
+export type SettingsBody = { items: Setting[]; groups: string[]; custom: number };

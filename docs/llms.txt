@@ -34,7 +34,8 @@ Each item carries `match.field` and a `match.snippet`; U+0001 and U+0002 wrap th
     -F title="share this" -F text=- -F visibility=public -F expires_in=86400 \
     -F password=correct-horse-battery -F max_views=5
 
-The link is https://pub.example.com/<slug>. That host has no list, no search and no write:
+The link is https://pub.example.com/<slug>. Public links are a switch: when it is off, a public
+paste is refused with 403 E_DISABLED and the public host serves nothing. That host has no list, no search and no write:
 only GET one paste, its /raw text and its files, plus POST /unlock when a password is set.
 A public paste must expire, and it cannot burn. Password minimum is 8 characters.
 max_views counts distinct readers (one per IP per hour); 0 or absent means no cap.
@@ -62,3 +63,18 @@ POST /pastes accepts an Idempotency-Key header; a retry returns the original pas
   mpaste ls -q arm64
 
 On the host that runs the container, `docker exec -i messer-paste mpaste put -` needs no token.
+
+## Settings
+
+Every deployment value has two doors: an environment variable and the settings page. The
+environment wins, and pins the key: a write to a pinned key answers 409 E_PINNED. A stored value is
+kept underneath, so removing the variable restores it.
+
+```
+GET    /api/v1/settings           every key with value, default, source (default|env|custom)
+PATCH  /api/v1/settings           {"max_text_bytes": 4194304} — all or nothing
+DELETE /api/v1/settings/{key}     back to the default
+```
+
+Boot-only keys (port, data_dir, paste_root, secret) are shown but never writable. `read_only` freezes
+writes with 409 E_READ_ONLY; settings stay writable so the freeze can always be lifted.
