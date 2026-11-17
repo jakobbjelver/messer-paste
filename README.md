@@ -1,25 +1,6 @@
-<img src="docs/banner.png" alt="Messer Paste" width="100%">
-
-A single-user pastebin for text, images and files. One Go binary serves the API and the app; SQLite
-holds the metadata and plain files hold the content; every open tab updates over one SSE stream.
-
-It is meant to run behind your own access layer. There are no accounts, no sharing controls and no
-tenancy: one person owns the archive, and the proxy in front of it is the door.
-
-|  |  |
-|---|---|
-| **Paste or drop** | text, images or any file — 2 MB of text, 100 MB per file, 250 MB per paste |
-| **Expiry** | an hour, a day, a week, or never |
-| **Burn after reading** | one reveal, then the bytes are deleted on every device |
-| **Public links** | read-only host, optional password, optional view cap |
-| **Edit** | replace the text and the file set in place, same URL |
-| **Archive** | search titles, filenames and bodies, with the matching fragment |
-| **Live** | a new paste appears in every open tab without polling |
-| **Phone** | installable; the shell opens offline, the archive never lies |
-
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img src="docs/screenshot.png" alt="The composer: a Go paste with its language, visibility, expiry and burn options in a rail on the right">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/screen-dark.png">
+  <img src="docs/brand/screen-light.png" alt="The composer: a Go paste with its language, visibility, expiry and burn options in a rail on the right" width="1280">
 </picture>
 
 ## Run
@@ -32,10 +13,8 @@ docker run -d --name paste \
   ghcr.io/jakobbjelver/messer-paste:latest
 ```
 
-Or build it yourself: `make docker` (Dockerfile in the repo, SPA embedded).
-
-CI publishes `ghcr.io/jakobbjelver/messer-paste` on every push to `main`, tagged with the commit and
-with `latest`.
+Or build it yourself: `make docker` (Dockerfile in the repo, SPA embedded). CI publishes
+`ghcr.io/jakobbjelver/messer-paste` on every push to `main`, tagged with the commit and with `latest`.
 
 Two volumes: `/data` is the SQLite database, its WAL and the unlock key; `/pastes` is one directory
 per paste, holding the original filenames. Nothing else is stateful, and the image runs as a non-root
@@ -50,6 +29,19 @@ Every value has two doors: an environment variable, and **Settings** in the app 
 theme toggle). The environment wins and pins the key — the page shows the variable's name and refuses
 the write — but a stored value is kept underneath, so removing the variable restores what you set
 there instead of snapping to the default.
+
+## What it does
+
+|  |  |
+|---|---|
+| **Paste or drop** | text, images or any file — 2 MB of text, 100 MB per file, 250 MB per paste |
+| **Expiry** | an hour, a day, a week, or never |
+| **Burn after reading** | one reveal, then the bytes are deleted on every device |
+| **Public links** | read-only host, optional password, optional view cap |
+| **Edit** | replace the text and the file set in place, same URL |
+| **Archive** | search titles, filenames and bodies, with the matching fragment |
+| **Live** | a new paste appears in every open tab without polling |
+| **Phone** | installable; the shell opens offline, the archive never lies |
 
 | Variable | Default | |
 |---|---|---|
@@ -75,22 +67,11 @@ there instead of snapping to the default.
 
 `GET /api/v1/settings` lists every key with its value, its default, and which layer set it.
 
-## Build from source
-
-```bash
-make dev      # Go API on :8015, Vite on :3015
-make build    # bin/messer-paste, SPA embedded
-make check    # fmt-check, vet, race tests, and the frontend type check
-```
-
-The first run creates `.dev/data` and `.dev/pastes`. `make doctor` checks the database, the content
-root, and drift between rows and directories.
-
 ## API
 
 `/api/v1`, JSON, cursor paged. The binary authenticates nobody: the proxy is the door, and the CLI
 carries an optional bearer token for whatever sits in front. The contract is `docs/openapi.json`,
-served live at `/api/v1/openapi.json`; `docs/llms.txt` is the primer to hand an agent first.
+served live at `/api/v1/openapi.json`.
 
 | Method | Path | |
 |---|---|---|
@@ -106,12 +87,10 @@ served live at `/api/v1/openapi.json`; `docs/llms.txt` is the primer to hand an 
 | `GET` | `/api/v1/events` | SSE: `created`, `updated`, `deleted`, `purged` |
 
 Titles are derived when you do not supply one: the first line of the text, `report.pdf`, `3 images`,
-or `crash loop + 1 image`.
-
-### CLI
+or `crash loop + 1 image`. Curl recipes for each route: `docs/examples.md`.
 
 `mpaste` is the same binary behind a different name (`/usr/bin/paste` is a macOS utility, so `paste`
-cannot be reused).
+cannot be reused):
 
 ```bash
 mpaste put - -t "build log" --expires 7d     # stdin → URL
@@ -119,17 +98,13 @@ mpaste get latest                            # the last paste, text and file lis
 mpaste ls -q arm64                           # search, with match snippets
 ```
 
-Inside the container no token is needed; anywhere else set `PASTE_URL`, and `PASTE_TOKEN` or a
-service token (`PASTE_AUTH_ID` / `PASTE_AUTH_SECRET`) if your proxy wants one.
+## Agents
 
-## On a phone
+Read [`AGENTS.md`](AGENTS.md) first — it is the code contract. The primer is
+[`docs/llms.txt`](docs/llms.txt); the machine contract is `docs/openapi.json`.
+`make check` is the gate: fmt, vet, race tests and the frontend type check.
 
-Installable: on iOS, Share → **Add to Home Screen**. It runs full screen, keeps its own session, and
-the shell is cached, so a dead network still opens the composer. The archive and the API are never
-cached — a cached list is a list that lies.
-
-iOS has no `share_target`, so sending something to Paste from another app is an iOS Shortcut: `POST`
-multipart to `/api/v1/pastes` with the bearer header, then enable **Show in Share Sheet**.
+Contributions are closed — fork it. Security reports go to a private advisory, never a public issue.
 
 ## Design notes
 
@@ -151,4 +126,5 @@ an API response.
 
 ## License
 
-MIT. Not accepting contributions right now.
+MIT. Not accepting contributions right now — see [`CONTRIBUTING.md`](CONTRIBUTING.md); forking is
+welcome. A vulnerability goes to a private advisory, per [`SECURITY.md`](SECURITY.md).

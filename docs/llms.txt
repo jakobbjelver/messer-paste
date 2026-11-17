@@ -1,80 +1,45 @@
 # Messer Paste
 
-A single-user pastebin: text, images and files, with expiry and burn-after-reading.
-Everything below needs a bearer token from a 0600 file, or a service token for the proxy in front.
+> A single-user pastebin for text, images and files. One Go binary serves the API and the app; the
+> proxy in front is the only door, and there are no accounts.
 
-## Write a paste from stdin
+Read this before changing anything. `AGENTS.md` is the contract; `docs/openapi.json` is the API.
 
-  printf 'error log…' | curl -sS -X POST https://paste.example.com/api/v1/pastes \
-    -H "Authorization: Bearer $PASTE_TOKEN" \
-    -F title="build log" -F expires_in=86400 -F text=-
+## Run
 
-## Write a paste from a file (multipart)
+```bash
+make dev      # Go API on :8015, Vite on :3015
+make check    # fmt-check, vet, race tests, frontend type check — the gate
+make doctor   # database, content root, drift between rows and directories
+```
 
-  curl -sS -X POST https://paste.example.com/api/v1/pastes \
-    -H "Authorization: Bearer $PASTE_TOKEN" \
-    -F title="screenshot" -F expires_in=0 \
-    -F file=@shot.png
-
-## Read the newest paste
-
-  curl -sS "https://paste.example.com/api/v1/pastes?limit=1" -H "Authorization: Bearer $PASTE_TOKEN"
-  curl -sS https://paste.example.com/api/v1/pastes/<slug> -H "Authorization: Bearer $PASTE_TOKEN"
-
-## Search titles, filenames and text
-
-  curl -sS "https://paste.example.com/api/v1/pastes?q=arm64" -H "Authorization: Bearer $PASTE_TOKEN"
-
-Each item carries `match.field` and a `match.snippet`; U+0001 and U+0002 wrap the hit.
-
-## Share a paste with someone who has no Access
-
-  curl -sS -X POST https://paste.example.com/api/v1/pastes \
-    -H "Authorization: Bearer ***" \
-    -F title="share this" -F text=- -F visibility=public -F expires_in=86400 \
-    -F password=correct-horse-battery -F max_views=5
-
-The link is https://pub.example.com/<slug>. Public links are a switch: when it is off, a public
-paste is refused with 403 E_DISABLED and the public host serves nothing. That host has no list, no search and no write:
-only GET one paste, its /raw text and its files, plus POST /unlock when a password is set.
-A public paste must expire, and it cannot burn. Password minimum is 8 characters.
-max_views counts distinct readers (one per IP per hour); 0 or absent means no cap.
-
-  curl -sS -X POST https://pub.example.com/api/v1/pastes/<slug>/unlock \
-    -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}'
-
-## Delete
-
-  curl -sS -X DELETE https://paste.example.com/api/v1/pastes/<slug> -H "Authorization: Bearer $PASTE_TOKEN"
+The first run creates `.dev/data` and `.dev/pastes`. In production it is one container with two
+volumes (`/data`, `/pastes`) and no authentication of its own.
 
 ## Contract
 
-  GET /api/v1/openapi.json
-  GET /api/v1/config          {"public_host":"pub.example.com"}
+- `docs/openapi.json` (served at `/api/v1/openapi.json`) — code that disagrees with it is a bug.
+- `GET /api/v1/settings` — every deployment value with its default and the layer that set it.
+- Errors are `{"error":{"code","message"}}`; a listing is `?limit=&cursor=` with `next_cursor`.
+- `POST /pastes` honours `Idempotency-Key`: a retry returns the original paste.
+- Recipes for every route: `docs/examples.md`.
 
-Timestamps are RFC 3339 UTC. Errors are {"error":{"code","message"}} with a stable code.
-Listing is paginated: ?limit=&cursor=, response has next_cursor and has_more.
-POST /pastes accepts an Idempotency-Key header; a retry returns the original paste.
+## Invariants
 
-## CLI (same API, no curl)
+1. **Content is not in the database.** The row indexes a directory; bytes live in
+   `<PASTE_ROOT>/<SLUG>/` with their original filenames.
+2. **Burn is a tombstone.** The reveal returns the payload and deletes it in one response; a second
+   visitor gets `410`, not `404`.
+3. **The public host is a router, not a second app.** Read one paste, its `/raw` and its files; no
+   list, no search, no write. A public paste must expire and cannot burn.
 
-  mpaste put file.log -t "build log" --expires 7d
-  mpaste get latest
-  mpaste ls -q arm64
+## Do not
 
-On the host that runs the container, `docker exec -i messer-paste mpaste put -` needs no token.
+- Add accounts, roles or tenancy — one owner is the product.
+- Serve a type inline that is not a known image, PDF or plain text; everything else is an attachment.
+- Name a host, a home path or a private domain in a shipped file.
+- Cache an API response in the app: the SSE stream is the only thing that stays open.
 
-## Settings
+## Licence
 
-Every deployment value has two doors: an environment variable and the settings page. The
-environment wins, and pins the key: a write to a pinned key answers 409 E_PINNED. A stored value is
-kept underneath, so removing the variable restores it.
-
-```
-GET    /api/v1/settings           every key with value, default, source (default|env|custom)
-PATCH  /api/v1/settings           {"max_text_bytes": 4194304} — all or nothing
-DELETE /api/v1/settings/{key}     back to the default
-```
-
-Boot-only keys (port, data_dir, paste_root, secret) are shown but never writable. `read_only` freezes
-writes with 409 E_READ_ONLY; settings stay writable so the freeze can always be lifted.
+MIT. Contributions are closed — fork it. A vulnerability goes to a private advisory, never an issue.
