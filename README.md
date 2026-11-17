@@ -8,7 +8,7 @@ tenancy: one person owns the archive, and the proxy in front of it is the door.
 
 |  |  |
 |---|---|
-| **Paste or drop** | text, images or files — 4 MB per paste, 1 MB per file |
+| **Paste or drop** | text, images or any file — 2 MB of text, 100 MB per file, 250 MB per paste |
 | **Expiry** | an hour, a day, a week, or never |
 | **Burn after reading** | one reveal, then the bytes are deleted on every device |
 | **Public links** | read-only host, optional password, optional view cap |
@@ -17,19 +17,24 @@ tenancy: one person owns the archive, and the proxy in front of it is the door.
 | **Live** | a new paste appears in every open tab without polling |
 | **Phone** | installable; the shell opens offline, the archive never lies |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot.png" alt="The composer: a Go paste with its language, visibility, expiry and burn options in a rail on the right">
+</picture>
+
 ## Run
 
 ```bash
 docker run -d --name paste \
-  -p 8080:8080 \
+  -p 127.0.0.1:8080:8080 \
   -v "$PWD/data:/data" \
-  -v "$PWD/content:/content" \
-  -e PASTE_TOKEN="$(openssl rand -hex 24)" \
+  -v "$PWD/pastes:/pastes" \
   ghcr.io/jakobbjelver/messer-paste:latest
 ```
 
-Two volumes: `/data` is the SQLite database and the unlock key, `/content` is one directory per paste.
-Nothing else is stateful, and the image runs as a non-root user.
+Two volumes: `/data` is the SQLite database, its WAL and the unlock key; `/pastes` is one directory
+per paste, holding the original filenames. Nothing else is stateful, and the image runs as a non-root
+user. Bind the port to loopback — the binary has no authentication of its own, by design.
 
 Behind a reverse proxy, terminate TLS there and forward to `:8080`. Set `PUBLIC_HOST` to the hostname
 that serves read-only links; that host gets a router of its own and answers only `GET /pastes/{slug}`,
@@ -38,17 +43,22 @@ the archive.
 
 | Variable | Default | |
 |---|---|---|
-| `PASTE_TOKEN` | — | bearer token for the API; without it, every request is local-only |
+| `PORT` | `:8080` | listen address |
+| `DATA_DIR` | `/data` | SQLite database, its WAL and the unlock key |
+| `PASTE_ROOT` | `/pastes` | one directory per paste |
 | `PUBLIC_HOST` | empty | hostname of the read-only host; unset disables public links |
-| `DATA_DIR` | `/data` | SQLite database, WAL and the unlock key |
-| `PASTE_ROOT` | `/content` | one directory per slug |
+| `PASTE_SECRET` | generated | signs the unlock cookie; a `0600` file is created if unset |
+| `MAX_TEXT_BYTES` | `2097152` | text body cap |
+| `MAX_FILE_BYTES` | `104857600` | one file |
+| `MAX_PASTE_BYTES` | `262144000` | everything a paste holds |
+| `MAX_BURN_BYTES` | `10485760` | a burn paste, because the reveal returns it inline |
 
 ## Build from source
 
 ```bash
 make dev      # Go API on :8015, Vite on :3015
 make build    # bin/messer-paste, SPA embedded
-make check    # go vet, tests, and the frontend type check
+make check    # fmt-check, vet, race tests, and the frontend type check
 ```
 
 The first run creates `.dev/data` and `.dev/pastes`. `make doctor` checks the database, the content
@@ -56,8 +66,9 @@ root, and drift between rows and directories.
 
 ## API
 
-`/api/v1`, JSON, cursor paged, bearer token. The contract is `docs/openapi.json`, served live at
-`/api/v1/openapi.json`; `docs/llms.txt` is the primer to hand an agent before it touches anything.
+`/api/v1`, JSON, cursor paged. The binary authenticates nobody: the proxy is the door, and the CLI
+carries an optional bearer token for whatever sits in front. The contract is `docs/openapi.json`,
+served live at `/api/v1/openapi.json`; `docs/llms.txt` is the primer to hand an agent first.
 
 | Method | Path | |
 |---|---|---|
@@ -86,7 +97,8 @@ mpaste get latest                            # the last paste, text and file lis
 mpaste ls -q arm64                           # search, with match snippets
 ```
 
-Inside the container no token is needed; anywhere else set `PASTE_URL` and a token.
+Inside the container no token is needed; anywhere else set `PASTE_URL`, and `PASTE_TOKEN` or a
+service token (`PASTE_AUTH_ID` / `PASTE_AUTH_SECRET`) if your proxy wants one.
 
 ## On a phone
 
