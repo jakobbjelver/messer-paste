@@ -1,36 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 
 import { BackLink } from "@/components/ui/back-link";
+import { advance, backTarget, EMPTY_TRAIL, parseTrail, type Trail } from "@/lib/trail";
 
 /**
  * "Back" is where you actually came from, not where the app guesses you came from.
  *
- * A single-page app has no referrer, so the tab keeps its own trail in sessionStorage: every route
- * change appends its path, and a back control points at the last entry that is not the current one.
- * The anchor is a real href, so a cold load, a new tab and a middle click all still work; when the
- * trail says the previous entry is the one we would navigate to, the click is handed to history
- * instead, which keeps the router's own scroll and state.
+ * A single-page app has no referrer, so the tab keeps its own trail in sessionStorage as a stack with
+ * a cursor (`lib/trail.ts`): every route change moves or pushes the cursor, and Back means exactly
+ * one step back — never "some other page I have been to", which is what let Back bounce between a
+ * paste and its editor. The anchor stays a real href, so a cold load, a new tab and a middle click
+ * all still work; when the trail says the previous entry is the one we would navigate to, the click
+ * is handed to history instead, which keeps the router's own scroll and state.
  */
-const TRAIL = "mpaste:trail";
-const LIMIT = 24;
+const TRAIL = "mpaste:trail:v2";
 
-function readTrail(): string[] {
+/** A navigation that should overwrite the entry it leaves (an editor save), not push a new one. */
+let pendingReplace: string | null = null;
+
+export function expectReplace(path: string) {
+  pendingReplace = path;
+}
+
+function readTrail(): Trail {
   try {
-    const raw = sessionStorage.getItem(TRAIL);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : [];
+    return parseTrail(sessionStorage.getItem(TRAIL));
   } catch {
-    return [];
+    return EMPTY_TRAIL;
   }
 }
 
-function writeTrail(list: string[]) {
-  try {
-    sessionStorage.setItem(TRAIL, JSON.stringify(list.slice(-LIMIT)));
-  } catch {
-    /* private mode */
-  }
+/**
+ * The trail as it reads on this page. Both the recorder and the back control go through here: the
+ * recorder writes the result, the control only needs to know where one step back is, and deriving it
+ * the same way means the label cannot disagree with the click.
+ */
+function trailFor(pathname: string): Trail {
+  return advance(readTrail(), pathname, pendingReplace === pathname);
 }
 
 /** A page's own name, for the sentence a back control carries. */
@@ -48,34 +55,56 @@ export function pageLabel(path: string): string {
 export function useTrailRecorder() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   useEffect(() => {
-    const list = readTrail();
-    if (list[list.length - 1] === pathname) return;
-    writeTrail([...list, pathname]);
+    const replace = pendingReplace === pathname;
+    if (replace) pendingReplace = null;
+    const next = advance(readTrail(), pathname, replace);
+    try {
+      sessionStorage.setItem(TRAIL, JSON.stringify(next));
+    } catch {
+      /* private mode */
+    }
   }, [pathname]);
 }
 
 type Target = { href: string; label: string; fromTrail: boolean };
 
 /**
- * The destination for a back control: the previous entry in this tab, or the fallback the page names
- * for a cold load. It re-resolves after a route change so a back and a forward keep telling the truth.
+ * The destination for a back control: one step back in this tab, or the fallback the page names for
+ * a cold load.
  */
 export function useBackTarget(fallbackHref: string, fallbackLabel: string): Target {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const [target, setTarget] = useState<Target>({ href: fallbackHref, label: fallbackLabel, fromTrail: false });
-
-  useEffect(() => {
-    const previous = [...readTrail()].reverse().find((entry) => entry !== pathname);
-    if (previous && previous !== fallbackHref) {
-      setTarget({ href: previous, label: `Back to ${pageLabel(previous)}`, fromTrail: true });
-    } else if (previous && previous === fallbackHref) {
-      setTarget({ href: previous, label: `Back to ${pageLabel(previous)}`, fromTrail: true });
-    } else {
-      setTarget({ href: fallbackHref, label: fallbackLabel, fromTrail: false });
+  return useMemo(() => {
+    const previous = backTarget(trailFor(pathname));
+    if (previous) {
+      return { href: previous, label: `Back to ${pageLabel(previous)}`, fromTrail: true };
     }
+    return { href: fallbackHref, label: fallbackLabel, fromTrail: false };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, fallbackHref, fallbackLabel]);
+}
 
-  return target;
+/** A canonical path back into the router. The trail stores hrefs, the router wants a route node. */
+function navigateBack(router: ReturnType<typeof useRouter>, href: string) {
+  const match = href.match(/^\/([0-9A-HJKMNP-Z]{8})(\/edit)?$/i);
+  if (match) {
+    const params = { slug: match[1].toUpperCase() };
+    if (match[2]) return router.navigate({ to: "/$slug/edit", params });
+    return router.navigate({ to: "/$slug", params });
+  }
+  switch (href) {
+    case "/":
+      return router.navigate({ to: "/", search: { duplicate: undefined } });
+    case "/recent":
+      return router.navigate({ to: "/recent" });
+    case "/settings":
+      return router.navigate({ to: "/settings" });
+    case "/ui":
+      return router.navigate({ to: "/ui" });
+    default:
+      window.location.assign(href);
+      return undefined;
+  }
 }
 
 /** The canon's one way back, pointed at the real previous page. */
@@ -91,8 +120,10 @@ export function AppBack({ fallbackHref, fallbackLabel }: { fallbackHref: string;
       onNavigate={(event) => {
         if (!target.fromTrail) return;
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        // Not history.back(): the browser's own stack still holds the entry a save replaced, so
+        // going back there would land on the page you are on. The trail is the truth here.
         event.preventDefault();
-        router.history.back();
+        navigateBack(router, target.href);
       }}
     />
   );

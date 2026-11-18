@@ -45,6 +45,7 @@ type Action =
   | { type: "files"; files: File[] }
   | { type: "remove"; key: string }
   | { type: "reset" }
+  | { type: "hydrate"; state: DraftState }
   | { type: "load"; paste: PasteDetail };
 
 let seq = 0;
@@ -72,6 +73,11 @@ function reducer(state: DraftState, action: Action): DraftState {
     case "reset": {
       for (const file of state.files) if (file.url) URL.revokeObjectURL(file.url);
       return { ...EMPTY };
+    }
+    // A restored draft replaces the state wholesale; the previews it brings are its own.
+    case "hydrate": {
+      for (const file of state.files) if (file.url) URL.revokeObjectURL(file.url);
+      return action.state;
     }
     case "load":
       return {
@@ -107,6 +113,7 @@ export function useDraft() {
   const removeFile = useCallback((key: string) => dispatch({ type: "remove", key }), []);
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
   const load = useCallback((paste: PasteDetail) => dispatch({ type: "load", paste }), []);
+  const hydrate = useCallback((state: DraftState) => dispatch({ type: "hydrate", state }), []);
 
   const counts = useMemo(() => {
     const lines = draft.text === "" ? 0 : draft.text.split("\n").length;
@@ -115,5 +122,5 @@ export function useDraft() {
     return { lines, textBytes, fileBytes };
   }, [draft.text, draft.files]);
 
-  return { draft, set, addFiles, removeFile, reset, load, counts };
+  return { draft, set, addFiles, removeFile, reset, load, hydrate, counts };
 }

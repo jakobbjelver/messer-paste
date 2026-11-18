@@ -122,6 +122,16 @@
   min-width: 0;
 }
 
+/* The read-only view honours the same preference the editor writes: wrapped text, no gutter (a
+   wrapped line has no single row to number). */
+.code-view[data-wrap="on"] .ed-gutter {
+  display: none;
+}
+.code-view[data-wrap="on"] .code-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @keyframes rowflash {
   0%, 100% { background-color: transparent; }
   20% { background-color: color-mix(in oklab, var(--primary) 8%, transparent); }

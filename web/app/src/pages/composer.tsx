@@ -8,11 +8,13 @@ import { toast } from "sonner";
 import { api, ApiError, type PasteDetail } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
-import { AppBack } from "@/components/back";
+import { AppBack, expectReplace } from "@/components/back";
 import { Editor } from "@/components/editor";
 import { Attachments } from "@/components/attachments";
 import { PasteOptions } from "@/components/paste-options";
 import { useDraft } from "@/hooks/use-draft";
+import { useDraftPersistence } from "@/hooks/use-draft-persistence";
+import { useWrap } from "@/hooks/use-wrap";
 import { useConfig, useShareBase } from "@/hooks/use-config";
 import { detectLanguage, languageLabel, type LanguageId } from "@/lib/language";
 import { previewTitle } from "@/lib/title";
@@ -36,19 +38,31 @@ export function ComposerScreen({
   const queryClient = useQueryClient();
   const shareBase = useShareBase();
   const { data: config } = useConfig();
-  const { draft, set, addFiles, removeFile, reset, load, counts } = useDraft();
+  const { draft, set, addFiles, removeFile, reset, load, hydrate, counts } = useDraft();
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [wrap, setWrap] = useState(() =>
-    typeof window === "undefined" ? false : window.matchMedia("(max-width: 720px)").matches,
-  );
+  const [wrap, setWrap] = useWrap();
   const fileInput = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
+  const loadedFor = useRef<string | null>(null);
 
+  // The server's copy fills the draft once per paste. Re-running it on every refetch (a live event,
+  // a window focus) is what used to replace in-progress text and silently drop attached files.
   useEffect(() => {
-    if (initial) load(initial);
-  }, [initial, load]);
+    if (!initial || mode !== "edit" || !slug || loadedFor.current === slug) return;
+    loadedFor.current = slug;
+    load(initial);
+  }, [initial, load, mode, slug]);
+
+  // A draft belongs to a paste, not to a tab: the composer has one, each edit has its own.
+  const persistence = useDraftPersistence({
+    key: mode === "edit" && slug ? slug : "new",
+    draft,
+    serverUpdatedAt: mode === "edit" ? initial?.updatedAt : undefined,
+    onHydrate: hydrate,
+    enabled: !duplicate,
+  });
 
   useEffect(() => {
     if (!duplicate) return;
@@ -128,8 +142,12 @@ export function ComposerScreen({
         /* clipboard blocked */
       }
       toast(mode === "edit" ? "Saved" : copied ? "Created · copied" : "Created");
+      // The draft is now the server's copy: stop mirroring it, and let the paste page own the
+      // history entry the editor was using.
+      persistence.clear();
       if (mode === "create") reset();
-      navigate({ to: "/$slug", params: { slug: saved.slug } });
+      if (mode === "edit" && slug) expectReplace(`/${saved.slug}`);
+      navigate({ to: "/$slug", params: { slug: saved.slug }, replace: mode === "edit" });
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         toast("Gone · deleted elsewhere");
@@ -147,7 +165,7 @@ export function ComposerScreen({
     } finally {
       setPending(false);
     }
-  }, [draft, mode, navigate, pending, queryClient, reset, shareBase, slug, hasText]);
+  }, [draft, mode, navigate, pending, persistence, queryClient, reset, shareBase, slug, hasText]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -343,7 +361,7 @@ export function ComposerScreen({
             <span className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setWrap((was) => !was)}
+                onClick={() => setWrap(!wrap)}
                 aria-pressed={wrap}
                 className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface-2)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface-2)]"}`}
               >

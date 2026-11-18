@@ -3,32 +3,37 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowRight,
-  Copy,
+  ArrowSquareOut,
   DownloadSimple,
   Fire,
+  LinkSimple,
   Lock,
   PencilSimple,
   Trash,
 } from "@phosphor-icons/react";
 
-import { api, ApiError, type RevealPayload } from "@/api";
+import { api, ApiError, type PasteFile, type RevealPayload } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
 import { AppBack } from "@/components/back";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CopyButton } from "@/components/ui/copy-button";
 import { toast } from "sonner";
 import { highlight } from "@/lib/highlight";
 import { absolute, bytes, kindLabel, remaining } from "@/lib/format";
+import { languageLabel, type LanguageId } from "@/lib/language";
 import { useIsPublicHost, useShareBase } from "@/hooks/use-config";
+import { useWrap } from "@/hooks/use-wrap";
+import { clearDraft } from "@/lib/draft-store";
 
-function CodeView({ text, language }: { text: string; language: string }) {
+function CodeView({ text, language, wrap }: { text: string; language: string; wrap: boolean }) {
   const numbers = useMemo(
     () => text.split("\n").map((_, index) => index + 1).join("\n"),
     [text],
   );
   return (
-    <div className="code-view">
+    <div className="code-view" data-wrap={wrap ? "on" : "off"}>
       <div className="ed-gutter" aria-hidden="true">
         {numbers}
       </div>
@@ -40,6 +45,34 @@ function CodeView({ text, language }: { text: string; language: string }) {
   );
 }
 
+/** An image keeps the file's name and size in a strip of its own: the page is a reader, not a gallery. */
+function PasteImage({ slug, file }: { slug: string; file: PasteFile }) {
+  return (
+    <figure className="m-0">
+      <img
+        src={api.fileUrl(slug, file.id)}
+        alt={file.name}
+        className="block w-full"
+        loading="lazy"
+      />
+      <figcaption className="flex h-9 items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1">
+        <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">{file.name}</span>
+        <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-3)]">
+          {bytes(file.size)}
+        </span>
+        <a
+          href={api.fileUrl(slug, file.id, true)}
+          download={file.name}
+          aria-label={`Download ${file.name}`}
+          className="grid size-8 shrink-0 place-items-center text-[var(--text-2)] no-underline hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+        >
+          <DownloadSimple size={14} aria-hidden="true" />
+        </a>
+      </figcaption>
+    </figure>
+  );
+}
+
 export function PastePage() {
   const { slug } = useParams({ from: "/$slug" });
   const navigate = useNavigate();
@@ -47,6 +80,7 @@ export function PastePage() {
   const [revealed, setRevealed] = useState<RevealPayload | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [password, setPassword] = useState("");
+  const [wrap, setWrap] = useWrap();
   const isPublicHost = useIsPublicHost();
   const shareBase = useShareBase();
 
@@ -83,6 +117,7 @@ export function PastePage() {
   const remove = useMutation({
     mutationFn: () => api.remove(slug),
     onSuccess: () => {
+      void clearDraft(slug);
       queryClient.invalidateQueries({ queryKey: ["pastes"] });
       queryClient.removeQueries({ queryKey: ["paste", slug] });
       toast("Deleted");
@@ -223,7 +258,9 @@ export function PastePage() {
           }
         />
         <div className="border border-[var(--border)] bg-[var(--surface)]">
-          {revealed.text ? <CodeView text={revealed.text} language={revealed.language} /> : null}
+          {revealed.text ? (
+            <CodeView text={revealed.text} language={revealed.language} wrap={wrap} />
+          ) : null}
           {revealed.files.map((file) => {
             const isImage = file.mime.startsWith("image/");
             const src = `data:${file.mime};base64,${file.data}`;
@@ -254,16 +291,8 @@ export function PastePage() {
   const isText = text.length > 0;
   const images = files.filter((file) => file.mime.startsWith("image/"));
   const others = files.filter((file) => !file.mime.startsWith("image/"));
+  const hasAttachments = files.length > 0;
   const total = paste.textBytes + paste.fileBytes;
-
-  async function copyContent() {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("Copied to clipboard");
-    } catch {
-      toast("Clipboard blocked");
-    }
-  }
 
   async function copyLink() {
     try {
@@ -308,21 +337,21 @@ export function PastePage() {
               <PencilSimple size={16} aria-hidden="true" />
             </Link>
             )}
-            {isText ? (
-              <button
-                type="button"
-                onClick={() => void copyContent()}
-                aria-label="Copy"
-                className="grid size-8 cursor-pointer place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-              >
-                <Copy size={16} aria-hidden="true" />
-              </button>
-            ) : null}
+            {/* Copying the link is the paste's one share action, so it says so and is always here —
+                a paste with no text still has a URL. Copying the text belongs to the text. */}
+            <button
+              type="button"
+              onClick={() => void copyLink()}
+              className="inline-flex h-8 cursor-pointer items-center gap-2 border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            >
+              <LinkSimple size={16} aria-hidden="true" />
+              Copy link
+            </button>
             {isText ? (
               <a
                 href={api.rawUrl(paste.slug)}
                 download={`${paste.slug}.txt`}
-                aria-label="Download"
+                aria-label="Download text"
                 className="grid size-8 place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
               >
                 <DownloadSimple size={16} aria-hidden="true" />
@@ -343,41 +372,14 @@ export function PastePage() {
       />
 
       <div className="border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex h-10 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
-          <span className="text-xs tabular-nums text-[var(--text-2)]">
-            {isText
-              ? "body.txt"
-              : `${files.length} ${files.length === 1 ? "file" : "files"}`}
-          </span>
-          <span className="flex items-center gap-3 text-[11px] tabular-nums text-[var(--text-3)]">
-            {isText ? (
-              <a
-                href={api.rawUrl(paste.slug)}
-                className="text-[var(--text-2)] no-underline hover:text-[var(--foreground)]"
-              >
-                Raw
-              </a>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void copyLink()}
-              className="inline-flex h-7 cursor-pointer items-center px-1.5 text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-            >
-              Copy link
-            </button>
-          </span>
-        </div>
-
-        {isText ? <CodeView text={text} language={paste.language} /> : null}
-
-        {images.map((file) => (
-          <img
-            key={file.id}
-            src={api.fileUrl(paste.slug, file.id)}
-            alt={file.name}
-            className="block w-full border-t border-[var(--border)]"
-          />
-        ))}
+        {/* Attachments lead: they are what the paste is about when it has any. */}
+        {images.length > 0 ? (
+          <div className="grid">
+            {images.map((file) => (
+              <PasteImage key={file.id} slug={paste.slug} file={file} />
+            ))}
+          </div>
+        ) : null}
 
         {others.map((file) => (
           <div
@@ -407,6 +409,39 @@ export function PastePage() {
             </a>
           </div>
         ))}
+
+        {isText ? (
+          <section className={hasAttachments ? "border-t border-[var(--border)]" : undefined}>
+            <div className="flex h-10 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
+              {/* The section is named after what it holds — the paste's text in its language, never a
+                  filename it does not have. */}
+              <span className="text-xs text-[var(--text-2)]">
+                {languageLabel(paste.language as LanguageId)}
+              </span>
+              <span className="flex items-center gap-1 text-[11px] tabular-nums">
+                <button
+                  type="button"
+                  onClick={() => setWrap(!wrap)}
+                  aria-pressed={wrap}
+                  title={wrap ? "Wrap is on" : "Wrap is off"}
+                  className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface-2)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface-2)]"}`}
+                >
+                  Wrap
+                </button>
+                <a
+                  href={api.rawUrl(paste.slug)}
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex h-7 items-center gap-1 px-1.5 text-[var(--text-2)] no-underline hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+                >
+                  Raw <ArrowSquareOut size={12} aria-hidden="true" />
+                </a>
+                <CopyButton value={text} label="Copy text" size="sm" className="ml-1" />
+              </span>
+            </div>
+            <CodeView text={text} language={paste.language} wrap={wrap} />
+          </section>
+        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] tabular-nums text-[var(--text-3)]">
