@@ -6,7 +6,7 @@
 
 **A single-user pastebin for text, images and files.**
 
-`MIT` · `Go` · `SQLite` · `v1.0.0` · `ghcr.io/jakobbjelver/messer-paste`
+`MIT` · `Go` · `SQLite` · `v1.1.0` · `ghcr.io/jakobbjelver/messer-paste`
 <!-- /messer:hero -->
 
 <picture>
