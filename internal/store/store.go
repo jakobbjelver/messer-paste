@@ -546,6 +546,45 @@ func (s *Store) Update(ctx context.Context, p *paste.Paste, files []paste.File) 
 	return tx.Commit()
 }
 
+// RepairFileIDs gives every file row with an empty public id a fresh one. Such a row was written by
+// a build that assigned ids on create but not on update: it is a 404 URL for the reader and it is
+// invisible to a client's keep list, so the paste silently loses that file on its next save. The
+// bytes are still in the tree, so this is a repair, not a migration to remember.
+func (s *Store) RepairFileIDs(ctx context.Context) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM files WHERE public_id = '' ORDER BY id`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	fixed := 0
+	for _, id := range ids {
+		for attempt := 0; attempt < 4; attempt++ {
+			if _, err := s.db.ExecContext(ctx,
+				`UPDATE files SET public_id = ? WHERE id = ?`, paste.NewPublicID(), id); err != nil {
+				if strings.Contains(err.Error(), "UNIQUE") && attempt < 3 {
+					continue
+				}
+				return fixed, err
+			}
+			fixed++
+			break
+		}
+	}
+	return fixed, nil
+}
+
 func (s *Store) Delete(ctx context.Context, slug string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -752,6 +791,11 @@ func index(ctx context.Context, tx *sql.Tx, p *paste.Paste, files []paste.File) 
 func insertFiles(ctx context.Context, tx *sql.Tx, pasteID int64, files []paste.File) error {
 	for index := range files {
 		file := &files[index]
+		// A file row without a public id is unreachable by URL and invisible to a client's keep
+		// list: the paste silently loses it on the next save. Refuse it here rather than store it.
+		if file.PublicID == "" {
+			return fmt.Errorf("file %q has no public id", file.Name)
+		}
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO files (paste_id, public_id, name, mime, size, rel, sort) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			pasteID, file.PublicID, file.Name, file.Mime, file.Size, file.Rel, file.Sort)

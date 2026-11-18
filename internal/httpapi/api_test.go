@@ -365,3 +365,85 @@ func TestPurgeAndSSE(t *testing.T) {
 		}
 	}
 }
+
+// A file added in an update is a new file: it must get its own public id, or the paste page asks
+// for /files/ (empty id) and the browser shows a broken image captioned with the filename.
+func TestUpdateAddsFileWithPublicID(t *testing.T) {
+	ts := newServer(t)
+	p := create(t, ts, map[string]string{"title": "no file yet", "text": "text only"}, "", nil)
+
+	body, contentType := form(t, map[string]string{"title": "no file yet", "text": "text only"}, "added.txt", []byte("hello from an update"))
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+api+"/pastes/"+p.Slug, body)
+	req.Header.Set("Content-Type", contentType)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		t.Fatalf("update = %d %s", res.StatusCode, raw)
+	}
+	var updated pasteDTO
+	_ = json.NewDecoder(res.Body).Decode(&updated)
+	res.Body.Close()
+	if len(updated.Files) != 1 || updated.Files[0].ID == "" {
+		t.Fatalf("added file has no public id: %+v", updated.Files)
+	}
+
+	res, err = http.Get(ts.URL + api + "/pastes/" + p.Slug + "/files/" + updated.Files[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("file GET = %d", res.StatusCode)
+	}
+	if got, _ := io.ReadAll(res.Body); string(got) != "hello from an update" {
+		t.Fatalf("bytes = %q", got)
+	}
+}
+
+// Two files in one update collided on UNIQUE(files.paste_id, files.public_id) and answered 500 —
+// the sentence the owner saw as "Could not save the paste".
+func TestUpdateAddsTwoFiles(t *testing.T) {
+	ts := newServer(t)
+	p := create(t, ts, map[string]string{"title": "two", "text": "first"}, "", nil)
+
+	buffer := &bytes.Buffer{}
+	writer := multipart.NewWriter(buffer)
+	_ = writer.WriteField("title", "two")
+	_ = writer.WriteField("text", "first")
+	for _, name := range []string{"a.scad", "b.png"} {
+		part, err := writer.CreateFormFile("file", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write([]byte("\x89PNG\r\n\x1a\n" + name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+api+"/pastes/"+p.Slug, buffer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		t.Fatalf("two files = %d %s", res.StatusCode, raw)
+	}
+	var updated pasteDTO
+	_ = json.NewDecoder(res.Body).Decode(&updated)
+	res.Body.Close()
+	if len(updated.Files) != 2 {
+		t.Fatalf("two files: %+v", updated.Files)
+	}
+	if updated.Files[0].ID == "" || updated.Files[1].ID == "" || updated.Files[0].ID == updated.Files[1].ID {
+		t.Fatalf("ids: %+v", updated.Files)
+	}
+}

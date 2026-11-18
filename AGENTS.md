@@ -33,6 +33,9 @@ polling.
 
 - **A handle is a cursor, never an id.** Slugs are 8 characters from a 31-character alphabet that
   omits `0`/`O` and `1`/`I`; no endpoint returns an auto-increment id.
+- **A file row always has a public id.** It is assigned in `Service.Create` *and* `Service.Update`,
+  and `store.insertFiles` refuses an empty one: the id is the file's URL and the handle a client keeps
+  with `keep`, so a row without it is an unreachable file the next save silently drops.
 - **`internal/httpapi` owns the status code.** Nothing below it writes a response.
 - **Content never lives in the database.** A paste is a directory; the row is an index into it.
 - **Burn is a tombstone.** The reveal response carries the payload and the delete; a second visitor
@@ -46,8 +49,9 @@ polling.
 
 ```bash
 make check      # fmt-check, vet, race tests, SPA typecheck — the gate CI runs
+cd web/app && npm test   # vitest: trail, prefs, draft rules
 make doctor     # env and volume sanity, no network
-make e2e        # Playwright against the dev pair (needs both servers up)
+node ~/Scripts/paste-view-probe.mjs   # paste-page acceptance probe (needs the dev pair)
 make dev        # API :8015 + Vite :3015
 ```
 

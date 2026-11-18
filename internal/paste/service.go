@@ -87,6 +87,7 @@ type Store interface {
 	IndexAll(ctx context.Context, bodies map[string]string, names map[string][]string) error
 	MarkBurned(ctx context.Context, slug string, at int64) error
 	WasBurned(ctx context.Context, slug string) (bool, error)
+	RepairFileIDs(ctx context.Context) (int, error)
 }
 
 type Service struct {
@@ -484,8 +485,21 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	if err != nil {
 		return nil, err
 	}
+	// A file added in an update is a new file and needs its identity now: without one the row is
+	// stored with an empty public id, which is a 404 URL for the reader and an invisible file for the
+	// client's `keep` list — and two of them collide on UNIQUE(paste_id, public_id).
+	for index := range added {
+		added[index].PublicID = NewPublicID()
+	}
 	files := append(kept, added...)
+	// One pass makes the set safe to insert: a kept row written by an older build can carry an empty
+	// public id, and a fresh id could collide with one already in the set.
+	seen := make(map[string]bool, len(files))
 	for index := range files {
+		for files[index].PublicID == "" || seen[files[index].PublicID] {
+			files[index].PublicID = NewPublicID()
+		}
+		seen[files[index].PublicID] = true
 		files[index].Sort = index
 	}
 
@@ -542,6 +556,11 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	}
 
 	if err := s.store.Update(ctx, p, files); err != nil {
+		// The bytes were placed before the write: a failed write must not leave them in the tree
+		// with no row pointing at them (that is how a 500 becomes a stranded attachment).
+		for _, file := range added {
+			_ = os.Remove(joinRel(s.tree.Dir(slug), file.Rel))
+		}
 		return nil, err
 	}
 	for _, rel := range removed {
@@ -647,10 +666,16 @@ func (s *Service) Sweep(ctx context.Context, now int64) {
 type ReconcileResult struct {
 	OrphanDirs  int
 	MissingDirs int
+	RepairedIDs int
 }
 
 func (s *Service) Reconcile(ctx context.Context) (ReconcileResult, error) {
 	var result ReconcileResult
+	if repaired, err := s.store.RepairFileIDs(ctx); err != nil {
+		s.log.Warn("repair file ids", "err", err)
+	} else {
+		result.RepairedIDs = repaired
+	}
 	page, err := s.store.List(ctx, ListOptions{Limit: 200})
 	if err != nil {
 		return result, err

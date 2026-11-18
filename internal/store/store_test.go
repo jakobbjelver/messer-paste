@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jakobbjelver/messer-paste/internal/paste"
@@ -27,7 +28,7 @@ func TestCRUD(t *testing.T) {
 		Slug: "ABCDEFGH", Title: "hello", Language: "text", Kind: "text",
 		TextBytes: 5, FileBytes: 5, FileCount: 1, CreatedAt: 10, UpdatedAt: 10,
 	}
-	files := []paste.File{{Name: "a.txt", Mime: "text/plain", Size: 5, Rel: "files/1-a.txt", Sort: 0}}
+	files := []paste.File{{PublicID: "ABCDEFGH", Name: "a.txt", Mime: "text/plain", Size: 5, Rel: "files/1-a.txt", Sort: 0}}
 	if err := st.Create(ctx, p, files); err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +188,52 @@ func TestWriteSettingsSavesAndClearsInOneCall(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("after clearing everything: %v", got)
+	}
+}
+
+// A row with no public id is a file nobody can open and nobody can keep: refuse it at the write.
+func TestUpdateRejectsEmptyPublicID(t *testing.T) {
+	ctx := context.Background()
+	st := open(t)
+	p := &paste.Paste{Slug: "ABCDEFGH", Title: "t", Language: "text", Kind: "text",
+		FileCount: 1, CreatedAt: 1, UpdatedAt: 1}
+	if err := st.Create(ctx, p, []paste.File{{PublicID: "ABCD2345", Name: "a.txt",
+		Mime: "text/plain", Size: 1, Rel: "files/1-a.txt"}}); err != nil {
+		t.Fatal(err)
+	}
+	err := st.Update(ctx, p, []paste.File{{Name: "b.txt", Mime: "text/plain", Size: 1, Rel: "files/1-b.txt"}})
+	if err == nil || !strings.Contains(err.Error(), "no public id") {
+		t.Fatalf("update err = %v", err)
+	}
+}
+
+// Rows written by the build that assigned ids on create only are repaired at boot, so the paste
+// keeps its file on the next save instead of silently losing it.
+func TestRepairFileIDs(t *testing.T) {
+	ctx := context.Background()
+	st := open(t)
+	p := &paste.Paste{Slug: "ABCDEFGH", Title: "t", Language: "text", Kind: "text",
+		CreatedAt: 1, UpdatedAt: 1}
+	if err := st.Create(ctx, p, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Bypass the guard to recreate the exact state an older binary left behind.
+	if _, err := st.db.Exec(`INSERT INTO files (paste_id, public_id, name, mime, size, rel, sort)
+		VALUES (?, '', 'a.scad', 'text/plain', 1, 'files/1-a.scad', 0)`, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	fixed, err := st.RepairFileIDs(ctx)
+	if err != nil || fixed != 1 {
+		t.Fatalf("repair = %d, %v", fixed, err)
+	}
+	got, err := st.Get(ctx, "ABCDEFGH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 1 || len(got.Files[0].PublicID) != 8 {
+		t.Fatalf("files = %+v", got.Files)
+	}
+	if again, err := st.RepairFileIDs(ctx); err != nil || again != 0 {
+		t.Fatalf("second pass = %d, %v", again, err)
 	}
 }
