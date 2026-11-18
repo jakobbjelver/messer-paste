@@ -48,28 +48,35 @@ function CodeView({ text, language, wrap }: { text: string; language: string; wr
 /** An image keeps the file's name and size in a strip of its own: the page is a reader, not a gallery. */
 function PasteImage({ slug, file }: { slug: string; file: PasteFile }) {
   return (
-    <figure className="m-0">
+    <figure className="m-0 bg-[var(--surface-2)]">
       <img
         src={api.fileUrl(slug, file.id)}
         alt={file.name}
-        className="block w-full"
+        className="block max-h-[420px] w-full object-contain"
         loading="lazy"
       />
-      <figcaption className="flex h-9 items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1">
+      <figcaption className="flex h-10 items-center gap-3 border-t border-[var(--border)] bg-[var(--surface)] pl-3 pr-2">
         <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">{file.name}</span>
         <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-3)]">
           {bytes(file.size)}
         </span>
-        <a
-          href={api.fileUrl(slug, file.id, true)}
-          download={file.name}
-          aria-label={`Download ${file.name}`}
-          className="grid size-8 shrink-0 place-items-center text-[var(--text-2)] no-underline hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
-        >
-          <DownloadSimple size={14} aria-hidden="true" />
-        </a>
+        <DownloadLink href={api.fileUrl(slug, file.id, true)} name={file.name} label={`Download ${file.name}`} />
       </figcaption>
     </figure>
+  );
+}
+
+/** One download control, one shape: the copy button's square, wherever a file or the text is saved. */
+function DownloadLink({ href, name, label }: { href: string; name: string; label: string }) {
+  return (
+    <a
+      href={href}
+      download={name}
+      aria-label={label}
+      className="inline-grid size-7 shrink-0 place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] no-underline transition-colors duration-150 hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+    >
+      <DownloadSimple size={16} aria-hidden="true" />
+    </a>
   );
 }
 
@@ -265,7 +272,12 @@ export function PastePage() {
             const isImage = file.mime.startsWith("image/");
             const src = `data:${file.mime};base64,${file.data}`;
             return isImage ? (
-              <img key={file.name} src={src} alt={file.name} className="block w-full" />
+              <img
+                key={file.name}
+                src={src}
+                alt={file.name}
+                className="block max-h-[420px] w-full object-contain"
+              />
             ) : (
               <a
                 key={file.name}
@@ -347,16 +359,6 @@ export function PastePage() {
               <LinkSimple size={16} aria-hidden="true" />
               Copy link
             </button>
-            {isText ? (
-              <a
-                href={api.rawUrl(paste.slug)}
-                download={`${paste.slug}.txt`}
-                aria-label="Download text"
-                className="grid size-8 place-items-center border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-              >
-                <DownloadSimple size={16} aria-hidden="true" />
-              </a>
-            ) : null}
             {isPublicHost ? null : (
               <button
                 type="button"
@@ -371,78 +373,86 @@ export function PastePage() {
         }
       />
 
-      <div className="border border-[var(--border)] bg-[var(--surface)]">
-        {/* Attachments lead: they are what the paste is about when it has any. */}
-        {images.length > 0 ? (
-          <div className="grid">
-            {images.map((file) => (
-              <PasteImage key={file.id} slug={paste.slug} file={file} />
-            ))}
-          </div>
-        ) : null}
-
-        {others.map((file) => (
-          <div
-            key={file.id}
-            className="flex h-11 items-center gap-3 border-t border-[var(--border)] pl-3 pr-1 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)]"
-          >
-            {/* The row opens the file; the icon saves it. Two different intentions, two targets. */}
-            <a
-              href={api.fileUrl(paste.slug, file.id)}
-              target="_blank"
-              rel="noopener"
-              className="flex min-w-0 flex-1 items-center gap-3 no-underline text-[var(--foreground)]"
-              aria-label={`Open ${file.name}`}
-            >
-              <span className="truncate">{file.name}</span>
-              <span className="ml-auto shrink-0 text-[11px] tabular-nums text-[var(--text-3)]">
-                {bytes(file.size)}
-              </span>
-            </a>
-            <a
-              href={api.fileUrl(paste.slug, file.id, true)}
-              download={file.name}
-              aria-label={`Download ${file.name}`}
-              className="grid size-9 shrink-0 place-items-center text-[var(--text-2)] no-underline hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-            >
-              <DownloadSimple size={16} aria-hidden="true" />
-            </a>
-          </div>
-        ))}
-
-        {isText ? (
-          <section className={hasAttachments ? "border-t border-[var(--border)]" : undefined}>
-            <div className="flex h-10 items-center justify-between gap-3 border-b border-[var(--border)] px-3">
-              {/* The section is named after what it holds — the paste's text in its language, never a
-                  filename it does not have. */}
-              <span className="text-xs text-[var(--text-2)]">
-                {languageLabel(paste.language as LanguageId)}
-              </span>
-              <span className="flex items-center gap-1 text-[11px] tabular-nums">
-                <button
-                  type="button"
-                  onClick={() => setWrap(!wrap)}
-                  aria-pressed={wrap}
-                  title={wrap ? "Wrap is on" : "Wrap is off"}
-                  className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface-2)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface-2)]"}`}
-                >
-                  Wrap
-                </button>
-                <a
-                  href={api.rawUrl(paste.slug)}
-                  target="_blank"
-                  rel="noopener"
-                  className="inline-flex h-7 items-center gap-1 px-1.5 text-[var(--text-2)] no-underline hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-                >
-                  Raw <ArrowSquareOut size={12} aria-hidden="true" />
-                </a>
-                <CopyButton value={text} label="Copy text" size="sm" className="ml-1" />
-              </span>
+      {/* Attachments lead: they are what the paste is about when it has any. */}
+      {hasAttachments ? (
+        <div className="border border-[var(--border)] bg-[var(--surface)]">
+          {images.length > 0 ? (
+            <div className="grid">
+              {images.map((file) => (
+                <PasteImage key={file.id} slug={paste.slug} file={file} />
+              ))}
             </div>
-            <CodeView text={text} language={paste.language} wrap={wrap} />
-          </section>
-        ) : null}
-      </div>
+          ) : null}
+
+          {others.map((file) => (
+            <div
+              key={file.id}
+              className="flex h-11 items-center gap-3 border-t border-[var(--border)] pl-3 pr-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-2)] first:border-t-0"
+            >
+              {/* The row opens the file; the button saves it. Two different intentions, two targets. */}
+              <a
+                href={api.fileUrl(paste.slug, file.id)}
+                target="_blank"
+                rel="noopener"
+                className="flex min-w-0 flex-1 items-center gap-3 no-underline text-[var(--foreground)]"
+                aria-label={`Open ${file.name}`}
+              >
+                <span className="truncate">{file.name}</span>
+                <span className="ml-auto shrink-0 text-[11px] tabular-nums text-[var(--text-3)]">
+                  {bytes(file.size)}
+                </span>
+              </a>
+              <DownloadLink
+                href={api.fileUrl(paste.slug, file.id, true)}
+                name={file.name}
+                label={`Download ${file.name}`}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* The text is its own block: a gap and a tinted bar, so the reader can see where the paste
+          stops being files and starts being words. */}
+      {isText ? (
+        <section
+          className={`border border-[var(--border)] bg-[var(--surface)] ${hasAttachments ? "mt-4" : ""}`}
+        >
+          <div className="flex h-10 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-2)] px-3">
+            {/* The section is named after what it holds — the paste's text in its language, never a
+                filename it does not have. */}
+            <span className="text-xs text-[var(--text-2)]">
+              {languageLabel(paste.language as LanguageId)}
+            </span>
+            <span className="flex items-center gap-1 text-[11px] tabular-nums">
+              <button
+                type="button"
+                onClick={() => setWrap(!wrap)}
+                aria-pressed={wrap}
+                title={wrap ? "Wrap is on" : "Wrap is off"}
+                className={`h-7 cursor-pointer px-2 text-xs ${wrap ? "bg-[var(--surface)] text-[var(--foreground)]" : "text-[var(--text-2)] hover:bg-[var(--surface)]"}`}
+              >
+                Wrap
+              </button>
+              <a
+                href={api.rawUrl(paste.slug)}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex h-7 items-center gap-1 px-1.5 text-[var(--text-2)] no-underline hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+              >
+                Raw <ArrowSquareOut size={12} aria-hidden="true" />
+              </a>
+              <DownloadLink
+                href={api.rawUrl(paste.slug)}
+                name={`${paste.slug}.txt`}
+                label="Download text"
+              />
+              <CopyButton value={text} label="Copy text" size="sm" />
+            </span>
+          </div>
+          <CodeView text={text} language={paste.language} wrap={wrap} />
+        </section>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] tabular-nums text-[var(--text-3)]">
         <span>

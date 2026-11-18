@@ -255,6 +255,16 @@ export function ComposerScreen({
           <input
             value={draft.title}
             onChange={(event) => set({ title: event.target.value })}
+            onKeyDown={(event) => {
+              // Tab out of the title lands in the text, which is what a person writing a paste wants
+              // next — not the Attach button in the header.
+              if (event.key !== "Tab" || event.shiftKey) return;
+              const source = document.getElementById("paste-source") as HTMLTextAreaElement | null;
+              if (!source) return;
+              event.preventDefault();
+              source.focus();
+              source.selectionStart = source.selectionEnd = source.value.length;
+            }}
             placeholder={previewTitle(draft.text, draft.files)}
             aria-label="Title"
             className="h-9 w-full min-w-[12ch] truncate bg-transparent font-sans text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--foreground)] text-ellipsis outline-none placeholder:text-[var(--text-3)]"
