@@ -14,6 +14,8 @@
   <img src="docs/brand/screen-light.png" alt="The composer: a Go paste with its language, visibility, expiry and burn options in a rail on the right" width="1280">
 </picture>
 
+<img src="docs/brand/demo.gif" alt="Compose, create, copy: one paste from an empty editor to a slug" width="1200">
+
 ## Run
 
 ```bash
