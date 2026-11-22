@@ -1,0 +1,38 @@
+name: messer-ui conformance
+
+# The canon gate for this repo, the same three steps transcode and swipe run. It reads the public
+# messer-ui checkout, so a public repository can run it (the audit's old "needs the registry"
+# exemption was wrong: registry/ ships in that checkout).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jakobbjelver/messer-ui
+          path: .messer-ui
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Source pass: colours, radii, icon set, type scale and fonts. No build, no browser.
+      # Fixtures and testdata are skipped by the walk: a scraped HTML page is input, not a surface.
+      - name: messer check (static)
+        run: node .messer-ui/scripts/check.mjs --app . --static
+      # `check` cannot see a stale block copy; this compares every installed block
+      # against registry/<item> (a deliberate divergence is declared in apps.json).
+      - name: installed blocks match the registry
+        run: node .messer-ui/scripts/blocks.mjs --app .
+      # The icons in this repo are a copy of the canon's mark; `npm run marks` regenerates them.
+      - name: installed icons match the canon marks
+        run: node .messer-ui/scripts/brand-check.mjs --app .
