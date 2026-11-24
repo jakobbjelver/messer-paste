@@ -51,8 +51,17 @@ type File struct {
 	Name     string `json:"name"`
 	Mime     string `json:"mime"`
 	Size     int64  `json:"size"`
-	Rel      string `json:"-"`
-	Sort     int    `json:"-"`
+	// Width and Height are the photo's size in the orientation it is meant to be seen in, read from
+	// its header at upload. The reader reserves the box from them, so nothing moves when the pixels
+	// arrive. Both are 0 for anything that is not a measurable image.
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
+	// Thumbs lists the derivative widths that exist for this file. A client builds its srcset from
+	// this, never from the widths it wishes existed.
+	Thumbs []int `json:"thumbs,omitempty"`
+
+	Rel  string `json:"-"`
+	Sort int    `json:"-"`
 }
 
 const (

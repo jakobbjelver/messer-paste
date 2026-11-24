@@ -97,7 +97,8 @@ func main() {
 	if result, err := svc.Reconcile(ctx); err != nil {
 		log.Warn("reconcile", "err", err)
 	} else if result != (paste.ReconcileResult{}) {
-		log.Info("reconciled", "orphanDirs", result.OrphanDirs, "missingDirs", result.MissingDirs, "repairedFileIDs", result.RepairedIDs)
+		log.Info("reconciled", "orphanDirs", result.OrphanDirs, "missingDirs", result.MissingDirs,
+			"repairedFileIDs", result.RepairedIDs, "photosMeasured", result.PhotosMeasured)
 	}
 
 	server := httpapi.New(cfg, svc, st, tree, hub, log)

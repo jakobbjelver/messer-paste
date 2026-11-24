@@ -38,6 +38,10 @@ polling.
   with `keep`, so a row without it is an unreachable file the next save silently drops.
 - **`internal/httpapi` owns the status code.** Nothing below it writes a response.
 - **Content never lives in the database.** A paste is a directory; the row is an index into it.
+- **A photo's shape is server data, and its bytes are its own identity.** `width`/`height` are read
+  from the header at upload (EXIF orientation applied), derivatives are written at upload, and a file
+  URL is cached `immutable` because a public id is never reused. A reader must never have to load an
+  image to learn how tall it is, and a `srcset` must never name a width the row does not carry.
 - **Burn is a tombstone.** The reveal response carries the payload and the delete; a second visitor
   gets `410`, not `404`.
 - **The public host is a router, not a second app.** A private slug on the public host is `404`, and
@@ -52,6 +56,7 @@ make check      # fmt-check, vet, race tests, SPA typecheck — the gate CI runs
 cd web/app && npm test   # vitest: trail, prefs, draft rules
 make doctor     # env and volume sanity, no network
 node ~/Scripts/paste-view-probe.mjs   # paste-page acceptance probe (needs the dev pair)
+node ~/Scripts/paste-image-cls-probe.mjs  # photo CLS, derivative bytes, the full-screen viewer
 make dev        # API :8015 + Vite :3015
 ```
 

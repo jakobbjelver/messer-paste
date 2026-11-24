@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -445,5 +448,106 @@ func TestUpdateAddsTwoFiles(t *testing.T) {
 	}
 	if updated.Files[0].ID == "" || updated.Files[1].ID == "" || updated.Files[0].ID == updated.Files[1].ID {
 		t.Fatalf("ids: %+v", updated.Files)
+	}
+}
+
+// photoBytes is a real JPEG, so the upload path measures it and writes derivatives the way a phone
+// photo is treated.
+func photoBytes(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 120, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// A photo's box is reserved by the JSON: the reader never has to wait for pixels to know the shape,
+// and the derivative a srcset names is one the server actually holds.
+func TestPhotoSizeAndDerivatives(t *testing.T) {
+	ts := newServer(t)
+	p := create(t, ts, map[string]string{"title": "photo", "text": ""}, "IMG_0001.jpeg", photoBytes(t, 2400, 1600))
+	if len(p.Files) != 1 {
+		t.Fatalf("files: %+v", p.Files)
+	}
+	file := p.Files[0]
+	if file.Width != 2400 || file.Height != 1600 {
+		t.Fatalf("size on the wire = %d×%d, want 2400×1600", file.Width, file.Height)
+	}
+	if len(file.Thumbs) != 2 || file.Thumbs[0] != 1024 || file.Thumbs[1] != 2048 {
+		t.Fatalf("thumbs = %v, want [1024 2048]", file.Thumbs)
+	}
+
+	base := ts.URL + api + "/pastes/" + p.Slug + "/files/" + file.ID
+	thumb, err := http.Get(base + "?w=1024")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer thumb.Body.Close()
+	if thumb.StatusCode != http.StatusOK {
+		t.Fatalf("thumb status = %d", thumb.StatusCode)
+	}
+	if got := thumb.Header.Get("Content-Type"); got != "image/jpeg" {
+		t.Fatalf("thumb content type = %q", got)
+	}
+	if got := thumb.Header.Get("Cache-Control"); !strings.Contains(got, "immutable") {
+		t.Fatalf("thumb cache-control = %q, want immutable", got)
+	}
+	etag := thumb.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("a derivative with no ETag is a 4 MB refetch every five minutes")
+	}
+	cfg, _, err := image.DecodeConfig(thumb.Body)
+	if err != nil || cfg.Width != 1024 {
+		t.Fatalf("derivative = %d px wide, err %v", cfg.Width, err)
+	}
+
+	// A revalidation costs a 304, not the bytes.
+	req, _ := http.NewRequest(http.MethodGet, base+"?w=1024", nil)
+	req.Header.Set("If-None-Match", etag)
+	again, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again.Body.Close()
+	if again.StatusCode != http.StatusNotModified {
+		t.Fatalf("conditional get = %d, want 304", again.StatusCode)
+	}
+
+	// A width that was never written is a 404, never a silent 4 MB fallback.
+	missing, err := http.Get(base + "?w=4096")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown width = %d, want 404", missing.StatusCode)
+	}
+
+	original, err := http.Get(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Body.Close()
+	if original.Header.Get("ETag") == etag {
+		t.Fatal("the original and its derivative must not share an ETag")
+	}
+	if got := original.Header.Get("Content-Length"); got == "" {
+		t.Fatal("the original is still the original")
+	}
+
+	saved, err := http.Get(base + "?download=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.Body.Close()
+	if got := saved.Header.Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+		t.Fatalf("download=1 disposition = %q", got)
 	}
 }

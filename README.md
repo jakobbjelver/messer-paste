@@ -95,7 +95,7 @@ served live at `/api/v1/openapi.json`.
 | `DELETE` | `/api/v1/pastes/{slug}` | delete one |
 | `DELETE` | `/api/v1/pastes` | purge all |
 | `GET` | `/api/v1/pastes/{slug}/raw` | the text body |
-| `GET` | `/api/v1/pastes/{slug}/files/{id}` | stream a file by public id |
+| `GET` | `/api/v1/pastes/{slug}/files/{id}` | stream a file by public id; `?w=1024` is the resized copy, `?download=1` saves it |
 | `POST` | `/api/v1/pastes/{slug}/reveal` | burn: return, delete, `410` after |
 | `GET` | `/api/v1/events` | SSE: `created`, `updated`, `deleted`, `purged` |
 

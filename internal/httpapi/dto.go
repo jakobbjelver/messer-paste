@@ -9,11 +9,16 @@ import (
 // The wire format is not the domain struct: timestamps are RFC 3339 UTC (the standard), and file
 // ids are public ids, never the row's auto-increment.
 
+// fileDTO is what a reader needs before it has seen a pixel: the size reserves the box, and the
+// widths are the derivative candidates that actually exist.
 type fileDTO struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Mime string `json:"mime"`
-	Size int64  `json:"size"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Mime   string `json:"mime"`
+	Size   int64  `json:"size"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+	Thumbs []int  `json:"thumbs,omitempty"`
 }
 
 type matchDTO struct {
@@ -93,7 +98,10 @@ func dtoPaste(p *paste.Paste) pasteDTO {
 	if len(p.Files) > 0 {
 		out.Files = make([]fileDTO, 0, len(p.Files))
 		for _, file := range p.Files {
-			out.Files = append(out.Files, fileDTO{ID: file.PublicID, Name: file.Name, Mime: file.Mime, Size: file.Size})
+			out.Files = append(out.Files, fileDTO{
+				ID: file.PublicID, Name: file.Name, Mime: file.Mime, Size: file.Size,
+				Width: file.Width, Height: file.Height, Thumbs: file.Thumbs,
+			})
 		}
 	}
 	if p.Match != nil {

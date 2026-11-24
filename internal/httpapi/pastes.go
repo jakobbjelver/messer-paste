@@ -184,20 +184,36 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, slug string) 
 		writeError(w, http.StatusNotFound, "E_NOT_FOUND")
 		return
 	}
-	handle, file, err := s.svc.File(r.Context(), slug, id)
+	// ?w=1024 asks for the derivative the row says was written at upload. An unknown width is a 404,
+	// never a silent fallback to the original: a srcset candidate that quietly weighs 4 MB is worse
+	// than one the browser never chose.
+	width := 0
+	if raw := r.URL.Query().Get("w"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			writeError(w, http.StatusBadRequest, "E_INVALID")
+			return
+		}
+		width = parsed
+	}
+	handle, file, contentType, err := s.svc.File(r.Context(), slug, id, width)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	defer handle.Close()
 
-	w.Header().Set("Content-Type", file.Mime)
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	// A file's public id is its identity and is never reused, so this URL's bytes never change: the
+	// browser may keep them for as long as it likes without asking again. Burn pastes never reach
+	// this handler (the service answers ErrBurnNeeded first), so nothing here outlives a burn.
+	w.Header().Set("ETag", fmt.Sprintf(`"%s-%d"`, file.PublicID, width))
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 
 	// A file the browser can render is opened, not saved; anything else is only ever a download.
 	// HTML never counts as viewable: a paste is user content and must not render as a page here.
-	viewable := viewableMime(file.Mime)
+	viewable := viewableMime(contentType)
 	saving := r.URL.Query().Get("download") == "1"
 	if viewable && !saving {
 		w.Header().Set("Content-Disposition", "inline")

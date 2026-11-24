@@ -38,6 +38,21 @@
           },
           "size": {
             "type": "integer"
+          },
+          "width": {
+            "type": "integer",
+            "description": "pixel width in display orientation (0/absent when not a measurable image)"
+          },
+          "height": {
+            "type": "integer",
+            "description": "pixel height in display orientation"
+          },
+          "thumbs": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "derivative widths available via ?w="
           }
         }
       },
@@ -463,6 +478,14 @@
                 "1"
               ]
             }
+          },
+          {
+            "name": "w",
+            "in": "query",
+            "description": "derivative width (must be one of the file's thumbs). 404 when that width was never written.",
+            "schema": {
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -472,7 +495,8 @@
               "application/octet-stream": {}
             }
           }
-        }
+        },
+        "description": "A file's public id is its identity and never changes, so the response carries an ETag and private, immutable caching. Burn pastes have no file URL at all."
       }
     },
     "/api/v1/pastes/{slug}/reveal": {

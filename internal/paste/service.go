@@ -62,6 +62,10 @@ type RevealFile struct {
 	Name string `json:"name"`
 	Mime string `json:"mime"`
 	Data string `json:"data"`
+	// A burned paste has no URL to ask again: the size travels with the bytes so the reader can
+	// reserve the box before it decodes a data URL of several megabytes.
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
 }
 
 type Reveal struct {
@@ -77,6 +81,9 @@ type Store interface {
 	List(ctx context.Context, opts ListOptions) (ListResult, error)
 	Update(ctx context.Context, p *Paste, files []File) error
 	Delete(ctx context.Context, slug string) error
+	// SetFileMeta records a photo's measured size and the derivatives written for it; the backfill
+	// uses it for rows stored before either existed.
+	SetFileMeta(ctx context.Context, fileID int64, width, height int, thumbs []int) error
 	Purge(ctx context.Context) ([]string, error)
 	Expired(ctx context.Context, now int64) ([]string, error)
 	IncrementViews(ctx context.Context, slug string) error
@@ -249,26 +256,42 @@ func (s *Service) Raw(ctx context.Context, slug string) (string, string, error) 
 	return text, p.Language, nil
 }
 
-// File opens one attachment for streaming. The caller closes it.
-func (s *Service) File(ctx context.Context, slug string, publicID string) (*os.File, File, error) {
+// File opens one attachment for streaming. The caller closes it. A width of 0 is the original;
+// anything else is the derivative of that width, and only when the row says it was written.
+func (s *Service) File(ctx context.Context, slug string, publicID string, width int) (*os.File, File, string, error) {
 	p, err := s.store.Get(ctx, slug)
 	if err != nil {
-		return nil, File{}, err
+		return nil, File{}, "", err
 	}
 	if p.Burn {
-		return nil, File{}, ErrBurnNeeded
+		return nil, File{}, "", ErrBurnNeeded
 	}
 	for _, file := range p.Files {
 		if file.PublicID != publicID {
 			continue
 		}
-		handle, err := s.tree.Open(slug, file.Rel)
-		if err != nil {
-			return nil, File{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		if width == 0 {
+			handle, err := s.tree.Open(slug, file.Rel)
+			if err != nil {
+				return nil, File{}, "", fmt.Errorf("%w: %v", ErrUnavailable, err)
+			}
+			return handle, file, file.Mime, nil
 		}
-		return handle, file, nil
+		contentType, ok := file.ThumbType(width)
+		if !ok {
+			return nil, File{}, "", ErrNotFound
+		}
+		ext := ".jpg"
+		if strings.HasSuffix(contentType, "png") {
+			ext = ".png"
+		}
+		handle, err := s.tree.Open(slug, ThumbRel(file.Rel, width, ext))
+		if err != nil {
+			return nil, File{}, "", fmt.Errorf("%w: %v", ErrUnavailable, err)
+		}
+		return handle, file, contentType, nil
 	}
-	return nil, File{}, ErrNotFound
+	return nil, File{}, "", ErrNotFound
 }
 
 func (s *Service) Get(ctx context.Context, slug string, countView bool) (*Paste, error) {
@@ -425,6 +448,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Paste, error) {
 			s.tree.Remove(p.Slug)
 			return nil, err
 		}
+		// Derivatives before the rows: a row that claims a width it does not have is worse than a
+		// row that has none, and a failed insert already removes the whole tree.
+		s.placeThumbs(p.Slug, files)
 		if err := s.store.Create(ctx, p, files); err != nil {
 			s.tree.Remove(p.Slug)
 			if isUnique(err) {
@@ -543,6 +569,7 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 	if err := s.placeAll(slug, in.Files, added); err != nil {
 		return nil, err
 	}
+	s.placeThumbs(slug, added)
 
 	keptIDs := make(map[int64]bool, len(kept))
 	for _, file := range kept {
@@ -560,11 +587,19 @@ func (s *Service) Update(ctx context.Context, slug string, in UpdateInput) (*Pas
 		// with no row pointing at them (that is how a 500 becomes a stranded attachment).
 		for _, file := range added {
 			_ = os.Remove(joinRel(s.tree.Dir(slug), file.Rel))
+			s.tree.RemoveThumbs(slug, file.Rel, file.Mime)
 		}
 		return nil, err
 	}
 	for _, rel := range removed {
 		_ = os.Remove(joinRel(s.tree.Dir(slug), rel))
+	}
+	// A removed attachment must not leave a readable picture behind in .thumbs.
+	for _, file := range current.Files {
+		if keptIDs[file.ID] {
+			continue
+		}
+		s.tree.RemoveThumbs(slug, file.Rel, file.Mime)
 	}
 
 	p.Text = text
@@ -623,9 +658,11 @@ func (s *Service) Reveal(ctx context.Context, slug string) (*Reveal, error) {
 			return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 		}
 		out.Files = append(out.Files, RevealFile{
-			Name: file.Name,
-			Mime: file.Mime,
-			Data: base64.StdEncoding.EncodeToString(raw),
+			Name:   file.Name,
+			Mime:   file.Mime,
+			Data:   base64.StdEncoding.EncodeToString(raw),
+			Width:  file.Width,
+			Height: file.Height,
 		})
 	}
 
@@ -667,6 +704,8 @@ type ReconcileResult struct {
 	OrphanDirs  int
 	MissingDirs int
 	RepairedIDs int
+	// PhotosMeasured counts existing attachments that just gained a size and/or derivatives.
+	PhotosMeasured int
 }
 
 func (s *Service) Reconcile(ctx context.Context) (ReconcileResult, error) {
@@ -706,6 +745,44 @@ func (s *Service) Reconcile(ctx context.Context) (ReconcileResult, error) {
 		}
 		result.OrphanDirs++
 	}
+	// Photos stored before the reader knew how to reserve their box: measure them once, here, and
+	// write the derivatives they never got. Best effort per file — a picture this binary cannot
+	// decode keeps its row and serves as uploaded.
+	for _, row := range rows {
+		files, err := s.store.Get(ctx, row.Slug)
+		if err != nil {
+			continue
+		}
+		for _, file := range files.Files {
+			if !strings.HasPrefix(file.Mime, "image/") {
+				continue
+			}
+			if file.Width > 0 && len(file.Thumbs) > 0 {
+				continue
+			}
+			source := joinRel(s.tree.Dir(row.Slug), file.Rel)
+			width, height := file.Width, file.Height
+			if width == 0 || height == 0 {
+				width, height = ImageSize(source)
+			}
+			thumbs := file.Thumbs
+			if width > 0 && len(thumbs) == 0 {
+				written, err := s.tree.Thumbs(row.Slug, file.Rel, file.Mime)
+				if err != nil {
+					s.log.Info("no derivative for existing photo", "slug", row.Slug, "file", file.Name, "err", err)
+				}
+				thumbs = written
+			}
+			if width == 0 && len(thumbs) == 0 {
+				continue
+			}
+			if err := s.store.SetFileMeta(ctx, file.ID, width, height, thumbs); err != nil {
+				s.log.Warn("backfill photo meta", "slug", row.Slug, "file", file.Name, "err", err)
+				continue
+			}
+			result.PhotosMeasured++
+		}
+	}
 	return result, nil
 }
 
@@ -717,15 +794,43 @@ func (s *Service) planFiles(in []Incoming, kept []File) ([]File, error) {
 			return nil, ErrTooLarge
 		}
 		name := SafeName(file.Name)
+		mime := normalizeMime(file.Mime, name)
+		// measured here, once, from the header: the reader reserves the box from these two numbers
+		// and every later stat of the file would be a read on the slow volume for data that never
+		// changes.
+		width, height := 0, 0
+		if strings.HasPrefix(mime, "image/") {
+			width, height = ImageSize(file.TempPath)
+		}
 		out = append(out, File{
-			Name: name,
-			Mime: normalizeMime(file.Mime, name),
-			Size: file.Size,
-			Rel:  fmt.Sprintf("files/%d-%s", start+index+1, name),
-			Sort: start + index,
+			Name:   name,
+			Mime:   mime,
+			Size:   file.Size,
+			Width:  width,
+			Height: height,
+			Rel:    fmt.Sprintf("files/%d-%s", start+index+1, name),
+			Sort:   start + index,
 		})
 	}
 	return out, nil
+}
+
+// placeThumbs writes the derivatives a freshly placed photo needs and records the widths on the File
+// values, which the caller stores in the same transaction as the rows. A failure is logged, never
+// returned: an upload that is stored and readable but unshrunk is a slow page, not a lost paste.
+func (s *Service) placeThumbs(slug string, files []File) {
+	for index := range files {
+		file := &files[index]
+		if !strings.HasPrefix(file.Mime, "image/") {
+			continue
+		}
+		widths, err := s.tree.Thumbs(slug, file.Rel, file.Mime)
+		if err != nil {
+			s.log.Warn("resize photo", "slug", slug, "file", file.Name, "err", err)
+			continue
+		}
+		file.Thumbs = widths
+	}
 }
 
 func (s *Service) placeAll(slug string, in []Incoming, planned []File) error {

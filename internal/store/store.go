@@ -51,7 +51,10 @@ CREATE TABLE IF NOT EXISTS files (
   mime      TEXT NOT NULL,
   size      INTEGER NOT NULL,
   rel       TEXT NOT NULL,
-  sort      INTEGER NOT NULL
+  sort      INTEGER NOT NULL,
+  width     INTEGER NOT NULL DEFAULT 0,
+  height    INTEGER NOT NULL DEFAULT 0,
+  thumbs    TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS burned (
@@ -123,37 +126,58 @@ func (s *Store) migrate() error {
 	if err := s.addPasteColumns(); err != nil {
 		return err
 	}
-	rows, err := s.db.Query(`PRAGMA table_info(files)`)
-	if err != nil {
+	if err := s.addFileColumns(); err != nil {
 		return err
 	}
+	// After the column exists: an index in the base schema would fail on an older files table, which
+	// is exactly how the first v0.2 deploy crash-looped.
+	_, err := s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public ON files(paste_id, public_id)`)
+	return err
+}
+
+// columnsOf lists a table's columns. Every migration here starts with it: the DDL is decided by what
+// the file on disk already has, never by a version number nobody stamped.
+func (s *Store) columnsOf(table string) (map[string]bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
-	hasPublic := false
+	have := map[string]bool{}
 	for rows.Next() {
 		var cid int
 		var name, kind string
 		var notNull, pk int
 		var def any
 		if err := rows.Scan(&cid, &name, &kind, &notNull, &def, &pk); err != nil {
-			return err
+			return nil, err
 		}
-		if name == "public_id" {
-			hasPublic = true
-		}
+		have[name] = true
 	}
-	if err := rows.Err(); err != nil {
+	return have, rows.Err()
+}
+
+// addFileColumns is the photo migration: the size a reader needs to reserve the box, and the
+// derivative widths it may ask for.
+func (s *Store) addFileColumns() error {
+	have, err := s.columnsOf("files")
+	if err != nil {
 		return err
 	}
-	rows.Close()
-	if !hasPublic {
-		if _, err := s.db.Exec(`ALTER TABLE files ADD COLUMN public_id TEXT NOT NULL DEFAULT ''`); err != nil {
+	for column, ddl := range map[string]string{
+		"public_id": `ALTER TABLE files ADD COLUMN public_id TEXT NOT NULL DEFAULT ''`,
+		"width":     `ALTER TABLE files ADD COLUMN width INTEGER NOT NULL DEFAULT 0`,
+		"height":    `ALTER TABLE files ADD COLUMN height INTEGER NOT NULL DEFAULT 0`,
+		"thumbs":    `ALTER TABLE files ADD COLUMN thumbs TEXT NOT NULL DEFAULT ''`,
+	} {
+		if have[column] {
+			continue
+		}
+		if _, err := s.db.Exec(ddl); err != nil {
 			return err
 		}
 	}
-	// After the column exists: an index in the base schema would fail on an older files table, which
-	// is exactly how the first v0.2 deploy crash-looped.
-	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public ON files(paste_id, public_id)`)
-	return err
+	return nil
 }
 
 // addPasteColumns is the v0.3 migration. It runs before any index that mentions these columns —
@@ -261,19 +285,30 @@ func (s *Store) Get(ctx context.Context, slug string) (*paste.Paste, error) {
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, public_id, name, mime, size, rel, sort FROM files WHERE paste_id = ? ORDER BY sort`, p.ID)
+		SELECT id, public_id, name, mime, size, rel, sort, width, height, thumbs FROM files WHERE paste_id = ? ORDER BY sort`, p.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var f paste.File
-		if err := rows.Scan(&f.ID, &f.PublicID, &f.Name, &f.Mime, &f.Size, &f.Rel, &f.Sort); err != nil {
+		var thumbs string
+		if err := rows.Scan(&f.ID, &f.PublicID, &f.Name, &f.Mime, &f.Size, &f.Rel, &f.Sort, &f.Width, &f.Height, &thumbs); err != nil {
 			return nil, err
 		}
+		f.Thumbs = paste.ParseThumbs(thumbs)
 		p.Files = append(p.Files, f)
 	}
 	return &p, rows.Err()
+}
+
+// SetFileMeta records what a photo's header (and a resize of it) says. It exists for the backfill:
+// rows written before this column existed are measured once at boot, not on every read.
+func (s *Store) SetFileMeta(ctx context.Context, fileID int64, width, height int, thumbs []int) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE files SET width = ?, height = ?, thumbs = ? WHERE id = ?`,
+		width, height, paste.ThumbList(thumbs), fileID)
+	return err
 }
 
 // List is the archive: keyset pagination on (updated_at, slug), and a search path that goes through
@@ -797,8 +832,9 @@ func insertFiles(ctx context.Context, tx *sql.Tx, pasteID int64, files []paste.F
 			return fmt.Errorf("file %q has no public id", file.Name)
 		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO files (paste_id, public_id, name, mime, size, rel, sort) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			pasteID, file.PublicID, file.Name, file.Mime, file.Size, file.Rel, file.Sort)
+			INSERT INTO files (paste_id, public_id, name, mime, size, rel, sort, width, height, thumbs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			pasteID, file.PublicID, file.Name, file.Mime, file.Size, file.Rel, file.Sort,
+			file.Width, file.Height, paste.ThumbList(file.Thumbs))
 		if err != nil {
 			return err
 		}
