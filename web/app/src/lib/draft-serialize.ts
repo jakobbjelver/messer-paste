@@ -21,8 +21,16 @@ export function storedFromDraft(key: string, draft: DraftState, now = Date.now()
     files: trimBlobs(
       draft.files.map<StoredFile>((file) =>
         file.file
-          ? { name: file.name, mime: file.mime, size: file.size, blob: file.file }
-          : { name: file.name, mime: file.mime, size: file.size, id: file.id },
+          ? { name: file.name, mime: file.mime, size: file.size, blob: file.file, width: file.width, height: file.height }
+          : {
+              name: file.name,
+              mime: file.mime,
+              size: file.size,
+              id: file.id,
+              width: file.width,
+              height: file.height,
+              thumbs: file.thumbs,
+            },
       ),
     ),
   };
@@ -44,7 +52,16 @@ export function draftFromStored(
     maxViews: stored.maxViews,
     files: stored.files.map<DraftFile>((file, index) => {
       if (file.id) {
-        return { key: `srv-${file.id}`, id: file.id, name: file.name, mime: file.mime, size: file.size };
+        return {
+          key: `srv-${file.id}`,
+          id: file.id,
+          name: file.name,
+          mime: file.mime,
+          size: file.size,
+          width: file.width,
+          height: file.height,
+          thumbs: file.thumbs,
+        };
       }
       const blob = file.blob ?? new Blob([], { type: file.mime });
       return {
@@ -54,6 +71,8 @@ export function draftFromStored(
         size: file.size,
         file: new File([blob], file.name, { type: file.mime }),
         url: file.mime.startsWith("image/") ? createUrl(blob) : undefined,
+        width: file.width,
+        height: file.height,
       };
     }),
   };

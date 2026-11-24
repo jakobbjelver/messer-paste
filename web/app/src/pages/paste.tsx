@@ -18,6 +18,8 @@ import { PageHead, MetaDot } from "@/components/page-head";
 import { AppBack } from "@/components/back";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Photo } from "@/components/photo";
+import { PhotoViewer, type ViewerPhoto } from "@/components/photo-viewer";
 import { CopyButton } from "@/components/ui/copy-button";
 import { toast } from "sonner";
 import { highlight } from "@/lib/highlight";
@@ -26,6 +28,7 @@ import { languageLabel, type LanguageId } from "@/lib/language";
 import { useIsPublicHost, useShareBase } from "@/hooks/use-config";
 import { useWrap } from "@/hooks/use-wrap";
 import { clearDraft } from "@/lib/draft-store";
+import { srcSetFor } from "@/lib/photo";
 
 function CodeView({ text, language, wrap }: { text: string; language: string; wrap: boolean }) {
   const numbers = useMemo(
@@ -45,15 +48,32 @@ function CodeView({ text, language, wrap }: { text: string; language: string; wr
   );
 }
 
-/** An image keeps the file's name and size in a strip of its own: the page is a reader, not a gallery. */
-function PasteImage({ slug, file }: { slug: string; file: PasteFile }) {
+/**
+ * An image keeps the file's name and size in a strip of its own: the page is a reader, not a gallery.
+ * The picture is a button — the reader exists so a photo can be *seen*, and a 356 px column is not
+ * where a 24 MP picture is seen.
+ */
+function PasteImage({
+  slug,
+  file,
+  eager,
+  onOpen,
+}: {
+  slug: string;
+  file: PasteFile;
+  eager: boolean;
+  onOpen: () => void;
+}) {
   return (
     <figure className="m-0 bg-[var(--surface-2)]">
-      <img
+      <Photo
         src={api.fileUrl(slug, file.id)}
-        alt={file.name}
-        className="block max-h-[420px] w-full object-contain"
-        loading="lazy"
+        srcSet={srcSetFor(file.thumbs, (width) => api.thumbUrl(slug, file.id, width))}
+        name={file.name}
+        width={file.width}
+        height={file.height}
+        eager={eager}
+        onOpen={onOpen}
       />
       <figcaption className="flex h-10 items-center gap-3 border-t border-[var(--border)] bg-[var(--surface)] pl-3 pr-2">
         <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">{file.name}</span>
@@ -88,6 +108,9 @@ export function PastePage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [password, setPassword] = useState("");
   const [wrap, setWrap] = useWrap();
+  // Which photo the full-screen reader is showing, by index into the page's images. One state for
+  // both branches (a burned paste shows the same viewer over its data URLs).
+  const [viewer, setViewer] = useState<number | null>(null);
   const isPublicHost = useIsPublicHost();
   const shareBase = useShareBase();
 
@@ -133,7 +156,34 @@ export function PastePage() {
     onError: () => toast("Could not delete"),
   });
 
+  // The viewer's list is the page's images, in order. A burned paste has no URLs left, so its photos
+  // are the revealed data URLs; both branches index the same filtered set.
+  const photos: ViewerPhoto[] = revealed
+    ? revealed.files
+        .filter((file) => file.mime.startsWith("image/"))
+        .map((file) => ({
+          src: `data:${file.mime};base64,${file.data}`,
+          name: file.name,
+          width: file.width,
+          height: file.height,
+        }))
+    : (query.data?.files ?? [])
+        .filter((file) => file.mime.startsWith("image/"))
+        .map((file) => ({
+          src: api.fileUrl(slug, file.id),
+          name: file.name,
+          width: file.width,
+          height: file.height,
+          size: file.size,
+          downloadHref: api.fileUrl(slug, file.id, true),
+        }));
+
   const burnRequired = query.error instanceof ApiError && query.error.status === 409;
+
+  // A burned paste answers with data URLs and no file list, so its images are split here rather than
+  // in JSX: the viewer's indexes and these indexes have to be the same list.
+  const revealedImages = (revealed?.files ?? []).filter((file) => file.mime.startsWith("image/"));
+  const revealedOthers = (revealed?.files ?? []).filter((file) => !file.mime.startsWith("image/"));
   const notFound =
     query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 410);
 
@@ -268,17 +318,28 @@ export function PastePage() {
           {revealed.text ? (
             <CodeView text={revealed.text} language={revealed.language} wrap={wrap} />
           ) : null}
-          {revealed.files.map((file) => {
-            const isImage = file.mime.startsWith("image/");
+          {revealedImages.map((file, index) => {
             const src = `data:${file.mime};base64,${file.data}`;
-            return isImage ? (
-              <img
-                key={file.name}
-                src={src}
-                alt={file.name}
-                className="block max-h-[420px] w-full object-contain"
-              />
-            ) : (
+            return (
+              <figure key={file.name} className="m-0 bg-[var(--surface-2)]">
+                <Photo
+                  src={src}
+                  name={file.name}
+                  width={file.width}
+                  height={file.height}
+                  eager
+                  onOpen={() => setViewer(index)}
+                />
+                <figcaption className="flex h-10 items-center gap-3 border-t border-[var(--border)] bg-[var(--surface)] pl-3 pr-2">
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">{file.name}</span>
+                  <DownloadLink href={src} name={file.name} label={`Download ${file.name}`} />
+                </figcaption>
+              </figure>
+            );
+          })}
+          {revealedOthers.map((file) => {
+            const src = `data:${file.mime};base64,${file.data}`;
+            return (
               <a
                 key={file.name}
                 href={src}
@@ -291,6 +352,7 @@ export function PastePage() {
             );
           })}
         </div>
+        <PhotoViewer photos={photos} index={viewer} onClose={() => setViewer(null)} onIndex={setViewer} />
       </PageContainer>
     );
   }
@@ -378,8 +440,14 @@ export function PastePage() {
         <div className="border border-[var(--border)] bg-[var(--surface)]">
           {images.length > 0 ? (
             <div className="grid">
-              {images.map((file) => (
-                <PasteImage key={file.id} slug={paste.slug} file={file} />
+              {images.map((file, index) => (
+                <PasteImage
+                  key={file.id}
+                  slug={paste.slug}
+                  file={file}
+                  eager={index === 0}
+                  onOpen={() => setViewer(index)}
+                />
               ))}
             </div>
           ) : null}
@@ -478,6 +546,7 @@ export function PastePage() {
         onConfirm={() => remove.mutate()}
         onCancel={() => setConfirmDelete(false)}
       />
+      <PhotoViewer photos={photos} index={viewer} onClose={() => setViewer(null)} onIndex={setViewer} />
     </PageContainer>
   );
 }

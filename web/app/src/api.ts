@@ -5,6 +5,11 @@ export type PasteFile = {
   name: string;
   mime: string;
   size: number;
+  /** The photo's size in display orientation; absent for anything unmeasurable. */
+  width?: number;
+  height?: number;
+  /** Derivative widths the server actually holds, ascending. */
+  thumbs?: number[];
 };
 
 export type Match = { field: "title" | "files" | "text"; snippet: string };
@@ -44,10 +49,18 @@ export type RevealPayload = {
   title: string;
   text: string;
   language: string;
-  files: Array<{ name: string; mime: string; data: string }>;
+  files: Array<{ name: string; mime: string; data: string; width?: number; height?: number }>;
 };
 
-type WireFile = { id: string; name: string; mime: string; size: number };
+type WireFile = {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  width?: number;
+  height?: number;
+  thumbs?: number[];
+};
 type WireMatch = { field: Match["field"]; snippet: string };
 type WirePaste = {
   slug: string;
@@ -190,6 +203,9 @@ export const api = {
   rawUrl: (slug: string) => `/api/v1/pastes/${slug}/raw`,
   fileUrl: (slug: string, id: string, download = false) =>
     `/api/v1/pastes/${slug}/files/${id}${download ? "?download=1" : ""}`,
+  /** A derivative the server said it wrote. Never a width the file does not carry. */
+  thumbUrl: (slug: string, id: string, width: number) =>
+    `/api/v1/pastes/${slug}/files/${id}?w=${width}`,
 };
 
 export type ExpiryChoice = { seconds: number; label: string };

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useReducer } from "react";
 
 import type { LanguageId } from "@/lib/language";
 import type { PasteDetail } from "@/api";
+import { measurePhoto } from "@/lib/photo";
 
 export type DraftFile = {
   key: string;
@@ -11,6 +12,10 @@ export type DraftFile = {
   size: number;
   file?: File;
   url?: string;
+  /** Measured locally (or read from the server) so the preview reserves the right box. */
+  width?: number;
+  height?: number;
+  thumbs?: number[];
 };
 
 export type DraftState = {
@@ -42,7 +47,7 @@ export const EMPTY: DraftState = {
 
 type Action =
   | { type: "patch"; patch: Partial<DraftState> }
-  | { type: "files"; files: File[] }
+  | { type: "files"; files: File[]; sizes: Array<{ width: number; height: number } | undefined> }
   | { type: "remove"; key: string }
   | { type: "reset" }
   | { type: "hydrate"; state: DraftState }
@@ -55,14 +60,19 @@ function reducer(state: DraftState, action: Action): DraftState {
     case "patch":
       return { ...state, ...action.patch };
     case "files": {
-      const added = action.files.map<DraftFile>((file) => ({
-        key: `new-${++seq}`,
-        name: file.name || "pasted-file",
-        mime: file.type || "application/octet-stream",
-        size: file.size,
-        file,
-        url: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-      }));
+      const added = action.files.map<DraftFile>((file, index) => {
+        const size = action.sizes[index];
+        return {
+          key: `new-${++seq}`,
+          name: file.name || "pasted-file",
+          mime: file.type || "application/octet-stream",
+          size: file.size,
+          file,
+          url: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+          width: size?.width,
+          height: size?.height,
+        };
+      });
       return { ...state, files: [...state.files, ...added] };
     }
     case "remove": {
@@ -98,6 +108,9 @@ function reducer(state: DraftState, action: Action): DraftState {
           name: file.name,
           mime: file.mime,
           size: file.size,
+          width: file.width,
+          height: file.height,
+          thumbs: file.thumbs,
         })),
       };
     default:
@@ -109,7 +122,12 @@ export function useDraft() {
   const [draft, dispatch] = useReducer(reducer, EMPTY);
 
   const set = useCallback((patch: Partial<DraftState>) => dispatch({ type: "patch", patch }), []);
-  const addFiles = useCallback((files: File[]) => dispatch({ type: "files", files }), []);
+  // Measured before the dispatch, not after: a preview that appears at one shape and snaps to
+  // another is the shift this page spent its budget removing.
+  const addFiles = useCallback(async (files: File[]) => {
+    const sizes = await Promise.all(files.map((file) => measurePhoto(file)));
+    dispatch({ type: "files", files, sizes });
+  }, []);
   const removeFile = useCallback((key: string) => dispatch({ type: "remove", key }), []);
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
   const load = useCallback((paste: PasteDetail) => dispatch({ type: "load", paste }), []);

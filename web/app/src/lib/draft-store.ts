@@ -12,6 +12,11 @@ export type StoredFile = {
   blob?: Blob;
   /** The public id of a file that is already saved; such a file is kept, not re-uploaded. */
   id?: string;
+  /** A photo's shape, so a restored draft reserves its box instead of guessing 3:2. */
+  width?: number;
+  height?: number;
+  /** Derivative widths, for a file that already exists on the server. */
+  thumbs?: number[];
 };
 
 export type StoredDraft = {
