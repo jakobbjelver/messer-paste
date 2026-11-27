@@ -24,9 +24,12 @@ export default defineConfig({
       manifest: false,
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        // Navigations go to the network first: a cache-first shell served yesterday's bundle.
+        // The shell is precached and a navigation is answered from it, which is what makes the app
+        // open instantly — and, when Access has no session, what leaves it painted and refused.
+        // `REAUTH_PATH` (src/lib/session.ts) is therefore denied: that one navigation has to reach
+        // the edge so Access can answer with its login redirect, and the session comes back.
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/reauth/],
         // No runtime caching at all. The API and the SSE stream are always live; the editor's own
         // autosaved draft lives in localStorage, not in a cache bucket.
         runtimeCaching: [],

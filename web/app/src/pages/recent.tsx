@@ -14,7 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-import { api, type PasteRow } from "@/api";
+import { api, isSessionExpiredError, type PasteRow } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead } from "@/components/page-head";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -224,7 +224,11 @@ export function RecentPage() {
       {list.isLoading ? (
         <SkeletonTable rows={6} />
       ) : list.isError ? (
-        <p className="text-sm text-[var(--destructive)]">The archive could not be loaded.</p>
+        <p className="text-sm text-[var(--destructive)]">
+          {isSessionExpiredError(list.error)
+            ? "This device has no Access session. Sign in above."
+            : "The archive could not be loaded."}
+        </p>
       ) : rows.length === 0 ? (
         <EmptyState
           title={search ? "No matches" : "Nothing here yet"}

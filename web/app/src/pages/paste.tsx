@@ -12,7 +12,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 
-import { api, ApiError, type PasteFile, type RevealPayload } from "@/api";
+import { api, ApiError, isSessionExpiredError, type PasteFile, type RevealPayload } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
 import { AppBack } from "@/components/back";
@@ -140,7 +140,9 @@ export function PastePage() {
     },
     onError: (error) =>
       toast(
-        error instanceof ApiError && error.status === 401 ? "Wrong password" : "Could not unlock",
+        error instanceof ApiError && error.status === 401 && !isSessionExpiredError(error)
+          ? "Wrong password"
+          : "Could not unlock",
       ),
   });
 

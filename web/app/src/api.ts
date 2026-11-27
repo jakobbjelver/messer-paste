@@ -1,3 +1,5 @@
+import { markSessionExpired } from "@/lib/session";
+
 export type PasteKind = "text" | "images" | "files" | "mixed";
 
 export type PasteFile = {
@@ -96,6 +98,14 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Access refuses a call before the app ever sees it, and it is the only 401 that is not the app's:
+ * a locked paste answers `E_LOCKED`, and its own 401s carry a code. `invalid_token` is Cloudflare's
+ * word for "this browser holds no session for this host" — see `lib/session.ts`.
+ */
+export const isSessionExpiredError = (error: unknown): boolean =>
+  error instanceof ApiError && error.status === 401 && error.code === "invalid_token";
+
 const unix = (iso: string | null | undefined): number | null => {
   if (!iso) return null;
   const ms = Date.parse(iso);
@@ -139,14 +149,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let field: string | undefined;
     try {
       const body = (await res.json()) as {
-        error?: { code?: string; message?: string; field?: string };
+        // The app's own shape is `{"error":{"code":…}}`; Cloudflare Access answers a refused call
+        // with `{"error":"invalid_token","error_description":…}` — a string, not an object.
+        error?: { code?: string; message?: string; field?: string } | string;
+        error_description?: string;
       };
-      if (body?.error?.code) code = body.error.code;
-      if (body?.error?.message) message = body.error.message;
-      if (body?.error?.field) field = body.error.field;
+      const flat = typeof body?.error === "string" ? body.error : undefined;
+      if (flat) {
+        code = flat;
+        message = body.error_description || flat;
+      } else if (body?.error && typeof body.error === "object") {
+        if (body.error.code) code = body.error.code;
+        if (body.error.message) message = body.error.message;
+        if (body.error.field) field = body.error.field;
+      }
     } catch {
       /* not JSON */
     }
+    if (res.status === 401 && code === "invalid_token") markSessionExpired();
     throw new ApiError(res.status, code, message, field);
   }
   if (res.status === 204) return undefined as T;

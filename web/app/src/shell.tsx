@@ -8,6 +8,7 @@ import { AppShell, type NavItem } from "@/components/ui/app-shell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { GlobalSearch } from "@/components/global-search";
 import { Mark } from "@/components/mark";
+import { SessionExpired } from "@/components/session-expired";
 import { LiveContext, useLiveEvents } from "@/hooks/use-live-events";
 import { useTheme } from "@/hooks/use-theme";
 import { useConfig, useIsPublicHost } from "@/hooks/use-config";
@@ -114,6 +115,7 @@ export function Shell() {
               </button>
             </div>
           ) : null}
+          {isPublic ? null : <SessionExpired />}
           {isPublic && !publicReady ? (
             <div className="mx-auto w-full max-w-[var(--shell)] px-4 py-16 md:px-8">
               <div className="border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">

@@ -8,6 +8,8 @@ import { EditPage } from "./pages/edit";
 import { SettingsPage } from "./pages/settings";
 import { SinkPage } from "./pages/sink";
 import { NotFoundPage } from "./pages/not-found";
+import { ReauthPage } from "./components/session-expired";
+import { REAUTH_PATH } from "./lib/session";
 
 const rootRoute = createRootRoute({ component: Shell, notFoundComponent: NotFoundPage });
 
@@ -52,11 +54,20 @@ const sinkRoute = createRoute({
   component: SinkPage,
 });
 
+// Registered before `/$slug` so a slug can never shadow it: a paste slug is 8 characters from an
+// alphabet without a `-`, and this path is the one the service worker is forbidden to answer.
+const reauthRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: REAUTH_PATH,
+  component: ReauthPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   recentRoute,
   settingsRoute,
   sinkRoute,
+  reauthRoute,
   pasteRoute,
   editRoute,
 ]);

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FloppyDisk, Lock, Paperclip, Plus, UploadSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-import { api, ApiError, type PasteDetail } from "@/api";
+import { api, ApiError, isSessionExpiredError, type PasteDetail } from "@/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHead, MetaDot } from "@/components/page-head";
 import { AppBack, expectReplace } from "@/components/back";
@@ -157,6 +157,9 @@ export function ComposerScreen({
       } else if (error instanceof ApiError && error.field) {
         setFieldErrors([{ field: error.field as FieldError["field"], message: error.message }]);
         toast.error("Could not save the paste", { description: error.message });
+      } else if (isSessionExpiredError(error)) {
+        // The banner says what to do; this only stops the old vague sentence from lying about it.
+        toast.error("Could not save the paste", { description: "Your Access session expired." });
       } else if (error instanceof ApiError) {
         toast.error("Could not save the paste", { description: error.message });
       } else {
