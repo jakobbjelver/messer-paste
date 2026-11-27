@@ -30,7 +30,9 @@ deploy:
 
 dev:
   command: "make dev"
+  runner: "~/Scripts/run-messer-paste-dev.sh"
   ports: [3015, 8015]
+  pm2: "messer-paste-dev"
 
 visibility: "public"             # public | private
 contributions: "closed"           # closed | open — no pull requests; issues and discussions stay off
