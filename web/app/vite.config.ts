@@ -43,8 +43,10 @@ export default defineConfig({
   build: { outDir: "dist", emptyOutDir: true },
   server: {
     host: true,
-    // Reached through a local proxy as something.local, and as pub.localhost for the public reader.
-    allowedHosts: [".local", ".localhost"],
+    // Reached through a local proxy as something.local, as pub.localhost for the public reader, and
+    // as paste-dev.messer.wtf through Caddy. The leading-dot form accepts every subdomain of each
+    // suffix, so a new dev hostname never turns into a 403 "Blocked request" that looks like an app bug.
+    allowedHosts: [".messer.wtf", ".local", ".localhost"],
     // changeOrigin: false keeps the browser's Host, which is how the dev server can answer as the
     // public host (http://pub.localhost:3015) without a second proxy.
     proxy: { "/api": { target: apiOrigin, changeOrigin: false } },
