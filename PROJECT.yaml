@@ -26,6 +26,7 @@ stack:
 deploy:
   kind: "docker"                 # docker | cloudflare-worker | pm2 | store | none
   image: "ghcr.io/jakobbjelver/messer-paste"
+  dev_domain: "paste-dev.messer.wtf"
 
 dev:
   command: "make dev"
