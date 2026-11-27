@@ -69,6 +69,13 @@ make doctor    # database, content root, row/directory drift
 
 `make doctor` checks the database, the content root, and drift between rows and directories.
 
+## Concurrent sessions
+
+- Claim a lane before the first write: `lane claim ~/Repos/messer-paste --session <label>`, work in
+  the printed path, stage explicit paths and land with `land`. Never `git add -A`.
+- Start the dev server with `devctl start messer-paste` or the Portal card; never `npm run dev &`.
+  Stop with `devctl stop messer-paste`.
+
 ## Conventions
 
 - Errors are a JSON envelope: `{"error":{"code":"E_INVALID","message":"…","field":"password"}}`. A
