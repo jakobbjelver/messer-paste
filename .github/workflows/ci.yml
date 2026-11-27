@@ -55,3 +55,13 @@ jobs:
 
       - name: Go build
         run: CGO_ENABLED=0 go build ./cmd/messer-paste
+      # messer-ui conformance, source pass: colours, radii, icon set, type scale and fonts.
+      # No browser, no running app. It rides in this job because a job has a one-minute
+      # billing floor: as its own workflow a twelve-second check cost a full minute per push.
+      # The block-copy canary (a slower, drift-shaped check) is the weekly messer-ui workflow.
+      - uses: actions/checkout@v4
+        with:
+          repository: jakobbjelver/messer-ui
+          path: .messer-ui
+      - name: messer check (static)
+        run: node .messer-ui/scripts/check.mjs --app . --static
